@@ -8,7 +8,6 @@ echo "$current_date_time Starting deployment of $tag_name using $rc_file for cre
 
 # creating network
 # check if network already exists
-#!/bin/bash
 
 # Define variables
 network_tag="$2"
