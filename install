@@ -8,10 +8,9 @@ echo "$current_date_time Starting deployment of $tag_name using $rc_file for cre
 
 # creating network
 # check if network already exists
-
 # Define variables
-network_tag="$2"
-network_name="$network_tag_network"
+
+network_name="$2_network"
 
 # Check if network already exists
 existing_networks=$(openstack network list --tag "$network_tag" --column Name -f value)
