@@ -6,23 +6,19 @@ tag_name=$2
 key_name=$3 #public key
 echo "$current_date_time Starting deployment of $tag_name using $rc_file for credentials."
 
-
-
 # creating network
-# Define variables
-network_tag="$2"
-network_name="$2_network"
+network_name="$2_network" # network name
 
 # Check if network already exists
-existing_networks=$(openstack network list --tag "$network_tag" --column Name -f value)
+existing_networks=$(openstack network list --tag "$tag_name" --column Name -f value)
 
-if echo "$existing_networks" | grep -qFx "$network_name"; then
+if echo "$existing_networks" | grep -qFx $network_name; then
     echo "Skipping network creation as $network_name already exists"
 else
     # Create network
-    create_network_output=$(openstack network create --tag "$network_tag" "$network_name" -f json)
+    created_network=$(openstack network create --tag "$tag_name" "$network_name" -f json)
 
-    if [ $? -eq 0 ] && [ "$(jq -r '.admin_state_up' <<< "$create_network_output")" = "true" ]; then
+    if [ $? -eq 0 ] && [ "$(jq -r '.admin_state_up' <<< "$created_network")" = "true" ]; then
         echo "Created network $network_name"
     else
         echo "ERROR: Failed to create network"
