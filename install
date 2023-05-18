@@ -10,6 +10,7 @@ echo "$current_date_time Starting deployment of $tag_name using $rc_file for cre
 # check if network already exists
 # Define variables
 
+network_tag="$2"
 network_name="$2_network"
 
 # Check if network already exists
