@@ -3,6 +3,8 @@
 current_date_time=$(date)
 rc_file=$1
 tag_name=$2
+key_name=$3 #public key
 echo "$current_date_time Starting deployment of $tag_name using $rc_file for credentials."
 
 # creating network
+openstack network create --tag $tag_name $tag_name_network
