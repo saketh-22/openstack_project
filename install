@@ -1,5 +1,4 @@
 #!/bin/bash
-
 current_date_time=$(date)
 rc_file=$1
 tag_name=$2
@@ -7,33 +6,34 @@ publickey=$3
 echo "$current_date_time Starting deployment of $tag_name using $rc_file for credentials."
 source $rc_file
 
-# creating network
-# check if network already exists
-
 # Define variables
-
 network_name="$2_network"
 subnet_name="$2_subnet"
-keypair_name="$2_keypair"
+keypair_name="$2_key"
+router_name="$2_router"
+security_group_name="$2_security_group"
+haproxy_server="$2_HAproxy"
+bastion_server="$2_bastion"
+dev_server="$2_dev"
 
 # Check if keypair exists
 existing_keypairs=$(openstack keypair list -f value --column Name)
 
 if echo "$existing_keypairs" | grep -qFx $keypair_name; then
-    echo "$(date) Skipping keypai creation as $keypair_name already exists"
+    echo "$(date) Skipping keypair creation as $keypair_name already exists"
 else
     # Create Keypair
     created_keypair=$(openstack keypair create --public-key $publickey "$keypair_name" )
+    echo "$(date) Created keypair $keypair_name"
 
-    if [ $? -eq 0 ]; then
-        echo "$(date) Created keypair $keypair_name"
-    else
-        echo "$(date) !! Failed to create keypair"
-        exit 1
-    fi
+    # if [ $? -eq 0 ]; then
+    #     echo "$(date) Created keypair $keypair_name"
+    # else
+    #     echo "$(date) !! Failed to create keypair"
+    #     exit 1
+    # fi
 fi
     
-
 
 # Check if network already exists
 existing_networks=$(openstack network list --tag "$tag_name" --column Name -f value)
@@ -43,13 +43,13 @@ if echo "$existing_networks" | grep -qFx $network_name; then
 else
     # Create network
     created_network=$(openstack network create --tag "$tag_name" "$network_name" -f json)
-
-    if [ $? -eq 0 ] && [ "$(jq -r '.admin_state_up' <<< "$created_network")" = "true" ]; then
-        echo "$(date) Created network $network_name"
-    else
-        echo "$(date) !! Failed to create network"
-        exit 1
-    fi
+    echo "$(date) Created network $network_name"
+    # if [ $? -eq 0 ] && [ "$(jq -r '.admin_state_up' <<< "$created_network")" = "true" ]; then
+    #     echo "$(date) Created network $network_name"
+    # else
+    #     echo "$(date) !! Failed to create network"
+    #     exit 1
+    # fi
 fi
 
 # Check if subnet already exists
@@ -60,13 +60,70 @@ if echo "$existing_subnets" | grep -qFx $subnet_name; then
 else
     # Create network
     created_subnet=$(openstack subnet create --subnet-range 10.10.0.0/24 --allocation-pool start=10.10.0.2,end=10.10.0.30 --tag "$tag_name" --network "$network_name" "$subnet_name" -f json)
+    echo "$(date) Created subnet $subnet_name"
+    # if [ $? -eq 0 ]; then #&& [ "$(jq '.cidr' <<< "$created_subnet")" == "\"10.10"" ]
+    #     echo "$(date) Created subnet $subnet_name"
+    # else
+    #     echo "$(date) !! Failed to create subnet"
+    #     exit 1
+    # fi
+fi
 
-    if [ $? -eq 0 ]; then #&& [ "$(jq '.cidr' <<< "$created_subnet")" == "\"10.10"" ]
-        echo "$(date) Created subnet $subnet_name"
-    else
-        echo "$(date) !! Failed to create subnet"
-        exit 1
-    fi
+# check if router already exists
+existing_routers=$(openstack router list --tag "$tag_name" --column Name -f value)
+if echo "$existing_routers" | grep -qFx $router_name; then
+    echo "$(date) Skipping router creation as $router_name already exists"
+else
+    created_router=$(openstack router create --tag $tag_name $router_name )
+    echo "$(date) Created router $router_name"
+    # add subnet and externel gateway to the router
+    openstack router add subnet $router_name $subnet_name
+    openstack router set --external-gateway ext-net $router_name
 fi
 
 
+# check if security group already exists
+existing_security_groups=$(openstack security group list --tag $tag_name -f value)
+# create security group
+if [[ -z "$existing_security_groups" ||  "$existing_security_groups" != *"$security_group_name"* ]]
+then
+    created_security_group=$(openstack security group create --tag $tag_name $security_group_name -f json)
+    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 22 --protocol tcp --ingress $security_group_name
+    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 80 --protocol icmp --ingress $security_group_name
+    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 5000 --protocol tcp --ingress $security_group_name
+    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 8080 --protocol tcp --ingress $security_group_name
+    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 6000 --protocol udp --ingress $security_group_name
+    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name
+    echo "$(date) Created security group $security_group_name"
+else
+    echo "Skipping creation of security group, as $security_group_name exists"
+fi
+
+# create floating ip for bastion and haproxy
+created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip)
+fip1="$(cat floating_ip)"
+
+created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
+fip2="$(cat floating_ip1)"
+echo "created floating ip addresses"
+
+# create servers
+existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
+
+if [[ "$existing_servers" == *"$bastion_server"* ]]; then
+        echo "$bastion_server already exists"
+else 
+    openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $bastion_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name 
+    openstack server add floating ip $bastion_server $fip1
+    echo "created $bastion_server server"
+fi
+
+if [[ "$existing_servers" == *"$haproxy_server"* ]]; then
+        echo "$haproxy_server already exists"
+else 
+    openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name 
+    openstack server add floating ip $haproxy_server $fip2
+    echo "created $haproxy_server server"
+fi
+
+servers_count=$(grep -ocP $dev_server <<< $existing_servers)
