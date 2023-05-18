@@ -11,5 +11,4 @@ echo "$current_date_time Starting deployment of $tag_name using $rc_file for cre
 
 # creating subnet
 
-subnet_list=$(openstack subnet list --tag $tag_name -f value)
-echo "$subnet_list"
+subnet_list=$()
