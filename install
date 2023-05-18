@@ -6,9 +6,45 @@ tag_name=$2
 echo "$current_date_time Starting deployment of $tag_name using $rc_file for credentials."
 
 # creating network
+# check if network already exists
+
+# Define variables
+
+network_name="$2_network"
+subnet_name="$2_subnet"
+
+# Check if network already exists
+existing_networks=$(openstack network list --tag "$tag_name" --column Name -f value)
+
+if echo "$existing_networks" | grep -qFx $network_name; then
+    echo "Skipping network creation as $network_name already exists"
+else
+    # Create network
+    created_network=$(openstack network create --tag "$tag_name" "$network_name" -f json)
+
+    if [ $? -eq 0 ] && [ "$(jq -r '.admin_state_up' <<< "$created_network")" = "true" ]; then
+        echo "Created network $network_name"
+    else
+        echo "!! Failed to create network"
+        exit 1
+    fi
+fi
+
+# Check if subnet already exists
+existing_subnets=$(openstack subnet list --tag "$tag_name" --column Name -f value)
+
+if echo "$existing_subnets" | grep -qFx $subnet_name; then
+    echo "Skipping subnet creation as $subnet_name already exists"
+else
+    # Create network
+    created_subnet=$(openstack subnet create --subnet-range 10.10.0.0/24 --allocation-pool start=10.10.0.2,end=10.10.0.30 --tag "$tag_name" --network "$network_name" "$subnet_name" -f json)
+
+    if [ $? -eq 0 ]; then #&& [ "$(jq '.cidr' <<< "$created_subnet")" == "\"10.10"" ]
+        echo "Created subnet $subnet_name"
+    else
+        echo "!! Failed to create subnet"
+        exit 1
+    fi
+fi
 
 
-
-# creating subnet
-
-subnet_list=$()
