@@ -132,7 +132,7 @@ devservers_count=$(grep -ocP $dev_server <<< $existing_servers)
 
 if(($required_dev_servers > $devservers_count)); then
     devservers_to_add=$(($required_dev_servers - $devservers_count))
-    sequence=1
+    sequence=$(( $devservers_count+1 ))
     devserver_name=${dev_server}${sequence}
     while [ $devservers_to_add -gt 0 ]
     do    
@@ -144,10 +144,12 @@ if(($required_dev_servers > $devservers_count)); then
         # devserver_name=${dev_server}_${sequence}
         sleep 10
         current_servers=$(openstack server list --status ACTIVE --column Name -f value)
-        if [[ "$current_servers" == *"$devserver_name"* ]]; then
-            sequence=$(( $sequence+1 )) 
-            devserver_name=${dev_server}${sequence}
-        fi
+        sequence=$(( $sequence+1 ))
+        devserver_name=${dev_server}${sequence}
+        # if [[ "$current_servers" == *"$devserver_name"* ]]; then
+        #     sequence=$(( $sequence+1 )) 
+        #     devserver_name=${dev_server}${sequence}
+        # fi
         # while [ $(grep -ocP "${dev_server}"$sequence  <<< $current_servers ) -ne 0 ]
         # do
         #     echo "in while"
