@@ -136,21 +136,17 @@ if(($required_dev_servers > $devservers_count)); then
     devserver_name=${dev_server}${sequence}
     while [ $devservers_to_add -gt 0 ]
     do    
-        echo "$devserver_name"
+
         openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name" 
-        echo "Created $devserver_name server"
+        echo "$(date)Created $devserver_name server"
         ((devservers_to_add--))
         # ((sequence++))
         # devserver_name=${dev_server}_${sequence}
         sleep 10
         current_servers=$(openstack server list --status ACTIVE --column Name -f value)
-        echo "[[ "$current_servers" == *"$devserver_name"* ]]"
         if [[ "$current_servers" == *"$devserver_name"* ]]; then
-            echo "in if"
             sequence=$(( $sequence+1 )) 
-            echo "$sequence"
             devserver_name=${dev_server}${sequence}
-            echo "$devserver_name"
         fi
         # while [ $(grep -ocP "${dev_server}"$sequence  <<< $current_servers ) -ne 0 ]
         # do
