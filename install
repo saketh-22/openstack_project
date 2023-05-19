@@ -17,23 +17,18 @@ security_group_name="$2_security_group"
 haproxy_server="$2_HAproxy"
 bastion_server="$2_bastion"
 dev_server="$2_dev"
+sshconfig="config"
+knownhosts="known_hosts"
+hostsfile="hosts"
 
 # Check if keypair exists
 existing_keypairs=$(openstack keypair list -f value --column Name)
-echo "hi"
 if echo "$existing_keypairs" | grep -qFx $keypair_name; then
     echo "$(date) $keypair_name already exists"
 else
     # Create Keypair
     created_keypair=$(openstack keypair create --public-key $publickey "$keypair_name" )
     echo "$(date) Created keypair $keypair_name"
-
-    # if [ $? -eq 0 ]; then
-    #     echo "$(date) Created keypair $keypair_name"
-    # else
-    #     echo "$(date) !! Failed to create keypair"
-    #     exit 1
-    # fi
 fi
     
 
@@ -44,14 +39,9 @@ if echo "$existing_networks" | grep -qFx $network_name; then
     echo "$(date) $network_name already exists"
 else
     # Create network
-    created_network=$(openstack network create --tag "$tag_name" "$network_name" -f json)
+    created_network=$(openstack network create --tag "$tag_name" "$network_name" -f json | jq -r '.id' > nic_id)
+    nic_netid=$(cat nic_id)
     echo "$(date) Created network $network_name"
-    # if [ $? -eq 0 ] && [ "$(jq -r '.admin_state_up' <<< "$created_network")" = "true" ]; then
-    #     echo "$(date) Created network $network_name"
-    # else
-    #     echo "$(date) !! Failed to create network"
-    #     exit 1
-    # fi
 fi
 
 # Check if subnet already exists
@@ -63,12 +53,6 @@ else
     # Create network
     created_subnet=$(openstack subnet create --subnet-range 10.10.0.0/24 --allocation-pool start=10.10.0.2,end=10.10.0.30 --tag "$tag_name" --network "$network_name" "$subnet_name" -f json)
     echo "$(date) Created subnet $subnet_name"
-    # if [ $? -eq 0 ]; then #&& [ "$(jq '.cidr' <<< "$created_subnet")" == "\"10.10"" ]
-    #     echo "$(date) Created subnet $subnet_name"
-    # else
-    #     echo "$(date) !! Failed to create subnet"
-    #     exit 1
-    # fi
 fi
 
 # check if router already exists
@@ -109,6 +93,18 @@ created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_i
 fip2="$(cat floating_ip1)"
 echo "$(date) created floating ip addresses"
 
+if [[ -f "$sshconfig" ]] ; then
+    rm "$sshconfig"
+fi
+
+if [[ -f "$knownhosts" ]] ; then
+    rm "$knownhosts"
+fi
+
+if [[ -f "$hostsfile" ]] ; then
+    rm "$hostsfile"
+fi
+
 # create servers
 existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
 
@@ -120,6 +116,13 @@ else
     echo "$(date) created $bastion_server server"
 fi
 
+echo "Host $bastion_server" >> $sshconfig
+echo "   User ubuntu" >> $sshconfig
+echo "   HostName $fip1" >> $sshconfig
+echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+echo "   StrictHostKeyChecking no" >> $sshconfig
+echo "   PasswordAuthentication no" >> $sshconfig
+
 if [[ "$existing_servers" == *"$haproxy_server"* ]]; then
         echo "$(date) $haproxy_server already exists"
 else 
@@ -128,39 +131,54 @@ else
     echo "$(date) created $haproxy_server server"
 fi
 
+echo " " >> $sshconfig
+echo " Host $haproxy_server" >> $sshconfig
+echo "   User ubuntu" >> $sshconfig
+echo "   HostName $fip2" >> $sshconfig
+echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+echo "   StrictHostKeyChecking no" >> $sshconfig
+echo "   PasswordAuthentication no ">> $sshconfig
+
+
+# generate hosts file
+echo "[HAproxy]" >> $hostsfile
+echo "$haproxy_server" >> $hostsfile
+echo " " >> $hostsfile
+echo "[webservers]" >> $hostsfile
+
 devservers_count=$(grep -ocP $dev_server <<< $existing_servers)
 
 if(($required_dev_servers > $devservers_count)); then
     devservers_to_add=$(($required_dev_servers - $devservers_count))
     sequence=$(( $devservers_count+1 ))
     devserver_name=${dev_server}${sequence}
-    while [ $devservers_to_add -gt 0 ]
+    ip_count=3
+    while [ $devservers_to_add -gt 0 ]  
     do    
-
-        openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name" 
-        echo "$(date)Created $devserver_name server"
+        devprivate_ip=10.10.0.1$ip_count
+        openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name" --nic net-id=$nic_netid,v4-fixed-ip=$devprivate_ip
+        echo "$(date) Created $devserver_name server"
         ((devservers_to_add--))
-        # ((sequence++))
-        # devserver_name=${dev_server}_${sequence}
-        sleep 10
+ 
+        echo " " >> $sshconfig
+        echo "Host $devserver_name" >> $sshconfig
+        echo "   User ubuntu" >> $sshconfig
+        echo "   HostName $devprivate_ip" >> $sshconfig
+        echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+        echo "   StrictHostKeyChecking no" >> $sshconfig
+        echo "   PasswordAuthentication no" >> $sshconfig
+        echo "   ProxyCommand ssh -w %h:%p $bastion_server" >> $sshconfig 
+
+        echo "$devserver_name" >> $hostsfile
+
         current_servers=$(openstack server list --status ACTIVE --column Name -f value)
         sequence=$(( $sequence+1 ))
+        ip_count=$(( $ip_count+1 ))
         devserver_name=${dev_server}${sequence}
-        # if [[ "$current_servers" == *"$devserver_name"* ]]; then
-        #     sequence=$(( $sequence+1 )) 
-        #     devserver_name=${dev_server}${sequence}
-        # fi
-        # while [ $(grep -ocP "${dev_server}"$sequence  <<< $current_servers ) -ne 0 ]
-        # do
-        #     echo "in while"
-        #     sequence=$(( $sequence+1 )) 
-        #     echo "$sequence"
-        #     devserver_name=${dev_server}${sequence}
-        #     echo "$devserver_name"
-        # done
 
     done
-elif (($required_dev_servers<$devservers_count)); then
+
+elif (( $required_dev_servers < $devservers_count )); then
     devservers_to_remove=$(($devservers_count - $required_dev_servers))
     sequence1=0
     while [[ $sequence1 -lt $devservers_to_remove ]]; do
@@ -169,13 +187,15 @@ elif (($required_dev_servers<$devservers_count)); then
         openstack server delete "$devserver_name"
         ((sequence1++))
     done
-elif (($required_dev_servers==$devservers_count)); then
+else
     echo "Required number of dev servers($required_dev_servers) already exist."
 fi
 
+existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
 
-
-
-
+echo " "
+echo "[all:vars]" >> $hostsfile
+echo "ansible_user=ubuntu" >> $hostsfile
+echo "#ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
 
 
