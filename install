@@ -3,6 +3,8 @@ current_date_time=$(date)
 rc_file=$1
 tag_name=$2
 publickey=$3
+required_dev_servers=$(cat servers.conf)
+
 echo "$current_date_time Starting deployment of $tag_name using $rc_file for credentials."
 source $rc_file
 
@@ -18,9 +20,9 @@ dev_server="$2_dev"
 
 # Check if keypair exists
 existing_keypairs=$(openstack keypair list -f value --column Name)
-
+echo "hi"
 if echo "$existing_keypairs" | grep -qFx $keypair_name; then
-    echo "$(date) Skipping keypair creation as $keypair_name already exists"
+    echo "$(date) $keypair_name already exists"
 else
     # Create Keypair
     created_keypair=$(openstack keypair create --public-key $publickey "$keypair_name" )
@@ -39,7 +41,7 @@ fi
 existing_networks=$(openstack network list --tag "$tag_name" --column Name -f value)
 
 if echo "$existing_networks" | grep -qFx $network_name; then
-    echo "$(date) Skipping network creation as $network_name already exists"
+    echo "$(date) $network_name already exists"
 else
     # Create network
     created_network=$(openstack network create --tag "$tag_name" "$network_name" -f json)
@@ -56,7 +58,7 @@ fi
 existing_subnets=$(openstack subnet list --tag "$tag_name" --column Name -f value)
 
 if echo "$existing_subnets" | grep -qFx $subnet_name; then
-    echo "$(date) Skipping subnet creation as $subnet_name already exists"
+    echo "$(date) $subnet_name already exists"
 else
     # Create network
     created_subnet=$(openstack subnet create --subnet-range 10.10.0.0/24 --allocation-pool start=10.10.0.2,end=10.10.0.30 --tag "$tag_name" --network "$network_name" "$subnet_name" -f json)
@@ -72,7 +74,7 @@ fi
 # check if router already exists
 existing_routers=$(openstack router list --tag "$tag_name" --column Name -f value)
 if echo "$existing_routers" | grep -qFx $router_name; then
-    echo "$(date) Skipping router creation as $router_name already exists"
+    echo "$(date) $router_name already exists"
 else
     created_router=$(openstack router create --tag $tag_name $router_name )
     echo "$(date) Created router $router_name"
@@ -96,7 +98,7 @@ then
     openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name
     echo "$(date) Created security group $security_group_name"
 else
-    echo "Skipping creation of security group, as $security_group_name exists"
+    echo "$(date) $security_group_name already exists"
 fi
 
 # create floating ip for bastion and haproxy
@@ -105,25 +107,77 @@ fip1="$(cat floating_ip)"
 
 created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
 fip2="$(cat floating_ip1)"
-echo "created floating ip addresses"
+echo "$(date) created floating ip addresses"
 
 # create servers
 existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
 
 if [[ "$existing_servers" == *"$bastion_server"* ]]; then
-        echo "$bastion_server already exists"
+        echo "$(date) $bastion_server already exists"
 else 
     openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $bastion_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name 
     openstack server add floating ip $bastion_server $fip1
-    echo "created $bastion_server server"
+    echo "$(date) created $bastion_server server"
 fi
 
 if [[ "$existing_servers" == *"$haproxy_server"* ]]; then
-        echo "$haproxy_server already exists"
+        echo "$(date) $haproxy_server already exists"
 else 
     openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name 
     openstack server add floating ip $haproxy_server $fip2
-    echo "created $haproxy_server server"
+    echo "$(date) created $haproxy_server server"
 fi
 
-servers_count=$(grep -ocP $dev_server <<< $existing_servers)
+devservers_count=$(grep -ocP $dev_server <<< $existing_servers)
+
+if(($required_dev_servers > $devservers_count)); then
+    devservers_to_add=$(($required_dev_servers - $devservers_count))
+    sequence=1
+    devserver_name=${dev_server}${sequence}
+    while [ $devservers_to_add -gt 0 ]
+    do    
+        echo "$devserver_name"
+        openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name" 
+        echo "Created $devserver_name server"
+        ((devservers_to_add--))
+        # ((sequence++))
+        # devserver_name=${dev_server}_${sequence}
+        sleep 10
+        current_servers=$(openstack server list --status ACTIVE --column Name -f value)
+        echo "[[ "$current_servers" == *"$devserver_name"* ]]"
+        if [[ "$current_servers" == *"$devserver_name"* ]]; then
+            echo "in if"
+            sequence=$(( $sequence+1 )) 
+            echo "$sequence"
+            devserver_name=${dev_server}${sequence}
+            echo "$devserver_name"
+        fi
+        # while [ $(grep -ocP "${dev_server}"$sequence  <<< $current_servers ) -ne 0 ]
+        # do
+        #     echo "in while"
+        #     sequence=$(( $sequence+1 )) 
+        #     echo "$sequence"
+        #     devserver_name=${dev_server}${sequence}
+        #     echo "$devserver_name"
+        # done
+
+    done
+elif (($required_dev_servers<$devservers_count)); then
+    devservers_to_remove=$(($devservers_count - $required_dev_servers))
+    sequence1=0
+    while [[ $sequence1 -lt $devservers_to_remove ]]; do
+        current_servers=$(openstack server list --status ACTIVE --column Name -f value)
+        devserver_name=$(grep -m1 -oP "${dev_server}_([0-9]+)" <<< "$current_servers")
+        openstack server delete "$devserver_name"
+        ((sequence1++))
+    done
+elif (($required_dev_servers==$devservers_count)); then
+    echo "Required number of dev servers($required_dev_servers) already exist."
+fi
+
+
+
+
+
+
+
