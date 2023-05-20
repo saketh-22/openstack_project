@@ -62,8 +62,8 @@ else
     created_router=$(openstack router create --tag $tag_name $router_name )
     echo "$(date) Created router $router_name"
     # add subnet and externel gateway to the router
-    openstack router add subnet $router_name $subnet_name
-    openstack router set --external-gateway ext-net $router_name
+    add_subnet=$(openstack router add subnet $router_name $subnet_name)
+    set_gateway=$(openstack router set --external-gateway ext-net $router_name)
 fi
 
 
@@ -119,8 +119,8 @@ existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
 if [[ "$existing_servers" == *"$bastion_server"* ]]; then
         echo "$(date) $bastion_server already exists"
 else 
-    openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $bastion_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name 
-    openstack server add floating ip $bastion_server $fip1
+    bastion=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $bastion_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
+    add_bastion_fip=$(openstack server add floating ip $bastion_server $fip1)
     echo "$(date) created $bastion_server server"
 fi
 
@@ -134,8 +134,8 @@ echo "   PasswordAuthentication no" >> $sshconfig
 if [[ "$existing_servers" == *"$haproxy_server"* ]]; then
         echo "$(date) $haproxy_server already exists"
 else 
-    openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name 
-    openstack server add floating ip $haproxy_server $fip2
+    haproxy=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
+    add_haproxy_fip=$(openstack server add floating ip $haproxy_server $fip2)
     echo "$(date) created $haproxy_server server"
 fi
 
@@ -191,7 +191,6 @@ if(($required_dev_servers > $devservers_count)); then
 
         current_servers=$(openstack server list --status ACTIVE --column Name -f value)
         sequence=$(( $sequence+1 ))
-        ip_count=$(( $ip_count+1 ))
         devserver_name=${dev_server}${sequence}
 
     done
@@ -200,9 +199,9 @@ elif (( $required_dev_servers < $devservers_count )); then
     devservers_to_remove=$(($devservers_count - $required_dev_servers))
     sequence1=0
     while [[ $sequence1 -lt $devservers_to_remove ]]; do
-        current_servers=$(openstack server list --status ACTIVE --column Name -f value)
-        devserver_name=$(grep -m1 -oP "${dev_server}_([0-9]+)" <<< "$current_servers")
-        openstack server delete "$devserver_name"
+        server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | grep -m1 -oP "${tag_name}"'_dev([1-9]+)')     
+        deleted_server=$(openstack server delete "$server_to_delete" --wait)
+        echo " $(date) Deleted $server_to_delete server"
         ((sequence1++))
     done
 else
