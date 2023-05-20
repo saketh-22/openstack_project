@@ -216,4 +216,5 @@ echo "[all:vars]" >> $hostsfile
 echo "ansible_user=ubuntu" >> $hostsfile
 echo "#ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
 
-
+# config_file="$(dirname "$0")/config"
+# ssh -F "$config_file"
