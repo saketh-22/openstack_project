@@ -124,9 +124,9 @@ if [[ -n "$unassigned_ips" ]]; then
 else
   # Create two new floating IPs
   echo "$(date) No unassigned floating IPs are available, creating new IPs"
-  created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
+  created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' >> floating_ip1)
   fip1="$(cat floating_ip1)"
-  created_fip2==$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
+  created_fip2==$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' >> floating_ip2)
   fip2="$(cat floating_ip2)"
 fi
 
@@ -201,7 +201,7 @@ if(($required_dev_servers > $devservers_count)); then
         done
 
         #ip_address=$(openstack server list --long -f json | jq -r --arg server "$devserver_name" --arg network "$network_name" '.[] | select(.Name == $server) | .Networks[$network][0]')
-        ip_address=$(openstack server show "$devserver_name" -f value -c addresses | awk -F '[=;]' '{print $2}')  
+        ip_address=$(openstack server show "$devserver_name" -f value -c addresses | grep -Po  '\d+\.\d+\.\d+\.\d+')  
         echo "$ip_address" 
         echo " " >> $sshconfig
         echo "Host $devserver_name" >> $sshconfig
