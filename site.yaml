@@ -1,0 +1,142 @@
+
+---
+-
+
+
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+  - name: Remove apt lock frontend file
+    file:
+      state: absent
+      path: "/var/lib/dpkg/lock-frontend"
+    become: yes
+  - name: Remove apt lock file
+    file:
+      state: absent
+      path: "/var/lib/dpkg/*"
+    become: yes
+
+  - name: Updating apt cache
+    become: true
+    apt:
+      update_cache: true
+
+  - name: installing pip3
+    become: true
+    apt:
+      name: python3-pip
+      state: latest
+
+  - name: install flask with pip
+    pip: name=flask
+
+  - name: copy the code
+    copy: 
+      src: application2.py 
+      dest: /application2.py
+
+  - name: installing gunicorn
+    apt:
+      name: gunicorn
+
+  - name: installing snmpd
+    apt:
+      name: snmpd
+      state: latest
+
+  - name: Configuring of snmpd 
+    template:
+      src: "./snmpd.conf"
+      dest: "/etc/snmp/snmpd.conf"
+
+  - name: restarting snmpd
+    service:
+      name: snmpd
+      state: restarted
+      enabled: yes
+
+  - name: copy application2.py
+    copy:
+      src: application2.py
+      dest: /home/ubuntu/application2.py
+      owner: ubuntu
+
+  - name: Run Flask app
+    shell: gunicorn -w 2 -D -b 0.0.0.0:8080 application2:app
+
+
+ 
+# haproxy configuration
+
+- hosts: all
+  gather_facts: yes
+- hosts: HAproxy
+  become: yes
+
+  tasks:
+
+  - name: updating apt cache
+    become: true
+    apt:
+      update_cache: true
+
+  - name: installing haproxy
+    become: true
+    apt:
+      name: haproxy
+      state: latest
+
+  - name: deploy haproxy configuration
+    template:
+      src: /$PWD/haproxy.cfg.j2
+      dest: /etc/haproxy/haproxy.cfg
+
+  - name: restarting Haproxy
+    service:
+      name: haproxy
+      state: restarted
+        
+ #nginx
+  - name: install nginx 
+    package: name=nginx state=latest
+
+  - name: create nginx config file
+    template:
+        src: nginx.conf
+        dest: "/etc/nginx/nginx.conf"
+    notify:
+      - restart nginx
+
+
+#snmp
+  - name: install snmpd
+    apt:
+      name: snmpd
+      state: present
+
+  - name: copy snmpd.conf file
+    template: 
+      src="./snmpd.conf"
+      dest="/etc/snmp/snmpd.conf"
+
+  - name: restart snmpd
+    service:
+       name: snmpd
+       state: restarted
+    become: yes
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+
+- hosts: webservers
+  become: yes
+  gather_facts: yes
+
+
