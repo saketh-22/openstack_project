@@ -35,7 +35,7 @@ defaults
 	errorfile 504 /etc/haproxy/errors/504.http
 
 frontend connect_node
-{% for haproxy in groups['haproxy'] %}
+{% for haproxy in groups['HAproxy'] %}
     bind {{ hostvars[haproxy]['ansible_default_ipv4']['address'] }}:5000
 {% endfor %}
     mode http

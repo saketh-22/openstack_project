@@ -1,8 +1,6 @@
 
 ---
 -
-
-
   hosts: webservers
   become: yes
   gather_facts: yes
@@ -36,8 +34,8 @@
 
   - name: copy the code
     copy: 
-      src: application2.py 
-      dest: /application2.py
+      src: service.py 
+      dest: /service.py
 
   - name: installing gunicorn
     apt:
@@ -59,17 +57,15 @@
       state: restarted
       enabled: yes
 
-  - name: copy application2.py
+  - name: copy service.py
     copy:
-      src: application2.py
-      dest: /home/ubuntu/application2.py
+      src: service.py
+      dest: /home/ubuntu/service.py
       owner: ubuntu
 
   - name: Run Flask app
-    shell: gunicorn -w 2 -D -b 0.0.0.0:8080 application2:app
+    shell: gunicorn -w 2 -D -b 0.0.0.0:8080 service:app
 
-
- 
 # haproxy configuration
 
 - hosts: all
