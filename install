@@ -202,7 +202,6 @@ if(($required_dev_servers > $devservers_count)); then
 
         #ip_address=$(openstack server list --long -f json | jq -r --arg server "$devserver_name" --arg network "$network_name" '.[] | select(.Name == $server) | .Networks[$network][0]')
         ip_address=$(openstack server show "$devserver_name" -f value -c addresses | grep -Po  '\d+\.\d+\.\d+\.\d+')  
-        echo "$ip_address" 
         echo " " >> $sshconfig
         echo "Host $devserver_name" >> $sshconfig
         echo "   User ubuntu" >> $sshconfig
