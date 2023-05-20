@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#!/bin/bash
+
+
 rc_file=$1
 tag_name=$2
 publickey=$3
@@ -17,6 +20,8 @@ dev_server="$2_dev"
 echo "Running Operation mode for tag: $tag_name using $rc_file for credentials"
 source $rc_file
 
+
+generate_config_file()
 while true
 do
 
@@ -52,20 +57,34 @@ do
             # done
 
         done
-    elif (($required_dev_servers<$devservers_count)); then
-        devservers_to_remove=$(($devservers_count - $required_dev_servers))
-        echo "$(date) Removing $devservers_to_remove dev servers ..."
-        sequence1=0
-        
-        # while [[ $sequence1 -lt $devservers_to_remove ]]; do
-            # current_servers=$(openstack server list --status ACTIVE --column Name -f value)
-            # devserver_name=$(grep -m1 -oP "${dev_server}_([0-9]+)" <<< "$current_servers")
-            # openstack server delete "$devserver_name"
-            # ((sequence1++))
-        # done
-    elif (($required_dev_servers==$devservers_count)); then
-        echo "Required number of dev servers($required_dev_servers) already exist."
-    fi
-    echo "Sleeping .."
+        elif (( $required_dev_servers < $devservers_count )); then
+            devservers_to_remove=$(($devservers_count - $required_dev_servers))
+            sequence1=0
+            while [[ $sequence1 -lt $devservers_to_remove ]]; do
+                server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | grep -m1 -oP "${tag_name}"'_dev([1-9]+)')     
+                deleted_server=$(openstack server delete "$server_to_delete" --wait)
+                echo " $(date) Deleted $server_to_delete server"
+                ((sequence1++))
+            done
+        else
+            echo "Required number of dev servers($required_dev_servers) already exist."
+        fi
+    echo "Entering into sleep mode"
     sleep 10
 done
+generate_config_file() {
+    if [[ -f "$sshconfig" ]] ; then
+    rm "$sshconfig"
+    fi
+
+    if [[ -f "$knownhosts" ]] ; then
+        rm "$knownhosts"
+    fi
+
+    if [[ -f "$hostsfile" ]] ; then
+        rm "$hostsfile"
+    fi
+    current_servers=$(openstack server list --status ACTIVE --column Name -f value)
+
+
+}
