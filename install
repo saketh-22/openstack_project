@@ -169,15 +169,11 @@ if(($required_dev_servers > $devservers_count)); then
         active=false
         while [ "$active" = false ]; do
             server_status=$(openstack server show "$devserver_name" -f value -c status)
-
-            echo "$server_status"
-            sl=$(openstack server list)
-            echo "$sl"
             if [ "$server_status" == "ACTIVE" ]; then
                 active=true
             fi
         done
-        ip_address=$(openstack server list --long -f json | jq -r '.[] | select(.Name == "'"$devserver_name"'") | .Networks."red_network"[0]')
+        ip_address=$(openstack server list --long -f json | jq -r '.[] | select(.Name == "'"$devserver_name"'") | .Networks."'"$network_name"'"[0]')
 
         echo "ip: $ip_address"
 
