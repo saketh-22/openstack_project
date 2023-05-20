@@ -15,11 +15,14 @@ keypair_name="$2_key"
 router_name="$2_router"
 security_group_name="$2_security_group"
 haproxy_server="$2_HAproxy"
+haproxy_server2="$2_HAproxy2"
 bastion_server="$2_bastion"
 dev_server="$2_dev"
 sshconfig="config"
 knownhosts="known_hosts"
 hostsfile="hosts"
+f1="floating_ip1"
+f2="floating_ip2"
 
 # Check if keypair exists
 existing_keypairs=$(openstack keypair list -f value --column Name)
@@ -73,12 +76,12 @@ existing_security_groups=$(openstack security group list --tag $tag_name -f valu
 if [[ -z "$existing_security_groups" ||  "$existing_security_groups" != *"$security_group_name"* ]]
 then
     created_security_group=$(openstack security group create --tag $tag_name $security_group_name -f json)
-    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 22 --protocol tcp --ingress $security_group_name
-    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 80 --protocol icmp --ingress $security_group_name
-    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 5000 --protocol tcp --ingress $security_group_name
-    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 8080 --protocol tcp --ingress $security_group_name
-    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 6000 --protocol udp --ingress $security_group_name
-    openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name
+    rule1=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 22 --protocol tcp --ingress $security_group_name)
+    rule2=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 80 --protocol icmp --ingress $security_group_name)
+    rule3=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 5000 --protocol tcp --ingress $security_group_name)
+    rule4=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 8080 --protocol tcp --ingress $security_group_name)
+    rule5=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 6000 --protocol udp --ingress $security_group_name)
+    rule6=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name)
     echo "$(date) Created security group $security_group_name"
 else
     echo "$(date) $security_group_name already exists"
@@ -96,21 +99,36 @@ if [[ -f "$hostsfile" ]] ; then
     rm "$hostsfile"
 fi
 
-if [[ -f "$floating_ip" ]] ; then
-    rm "$floating_ip"
+if [[ -f "$f1" ]] ; then
+    rm "$f1"
 fi
 
-if [[ -f "$floating_ip1" ]] ; then
-    rm "$floating_ip1"
+if [[ -f "$f2" ]] ; then
+    rm "$f2"
 fi
 
 # create floating ip for bastion and haproxy
-created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip)
-fip1="$(cat floating_ip)"
+# Check if there are unassigned floating IPs
+unassigned_ips=$(openstack floating ip list --status DOWN -f value -c "Floating IP Address")
 
-created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
-fip2="$(cat floating_ip1)"
-echo "$(date) created floating ip addresses"
+if [[ -n "$unassigned_ips" ]]; then
+  fip1=$(echo "$unassigned_ips" | head -n 1)
+  fip2=$(echo "$unassigned_ips" | sed -n 2p)
+  if [[ -n "$fip2" ]]; then
+    echo "$(date) Extracted floating IPs"
+  else
+    # Create a new floating IP
+    created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
+    fip2="$(cat floating_ip2)"
+  fi
+else
+  # Create two new floating IPs
+  echo "$(date) No unassigned floating IPs are available, creating new IPs"
+  created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
+  fip1="$(cat floating_ip1)"
+  created_fip2==$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
+  fip2="$(cat floating_ip2)"
+fi
 
 # create servers
 existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
@@ -134,18 +152,27 @@ if [[ "$existing_servers" == *"$haproxy_server"* ]]; then
         echo "$(date) $haproxy_server already exists"
 else 
     haproxy=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
+    haproxy2=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server2 --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
     add_haproxy_fip=$(openstack server add floating ip $haproxy_server $fip2)
-    echo "$(date) created $haproxy_server server"
+    add_haproxy2_fip=$(openstack server add floating ip $haproxy_server2 $fip2)
+    echo "$(date) created two HAproxy servers"
 fi
 
 echo " " >> $sshconfig
-echo " Host $haproxy_server" >> $sshconfig
+echo "Host $haproxy_server" >> $sshconfig
 echo "   User ubuntu" >> $sshconfig
 echo "   HostName $fip2" >> $sshconfig
 echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
 echo "   StrictHostKeyChecking no" >> $sshconfig
 echo "   PasswordAuthentication no ">> $sshconfig
 
+echo " " >> $sshconfig
+echo "Host $haproxy_server2" >> $sshconfig
+echo "   User ubuntu" >> $sshconfig
+echo "   HostName $fip2" >> $sshconfig
+echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+echo "   StrictHostKeyChecking no" >> $sshconfig
+echo "   PasswordAuthentication no ">> $sshconfig
 
 # generate hosts file
 echo "[HAproxy]" >> $hostsfile
@@ -172,16 +199,10 @@ if(($required_dev_servers > $devservers_count)); then
                 active=true
             fi
         done
+
         #ip_address=$(openstack server list --long -f json | jq -r --arg server "$devserver_name" --arg network "$network_name" '.[] | select(.Name == $server) | .Networks[$network][0]')
-        json_output=$(openstack server list --long -f json)
-
-        # Use jq to extract the IP addresses based on server name and network name
-        ip_address=$(openstack server show "$devserver_name" -f value -c addresses | awk -F '[=;]' '{print $2}')
-
-        # ip_address=$(jq -r --arg server "$devserver_name" --arg network "$network_name" \
-        # 'map(select(.Name == $server).Networks[$network][0]) | .[]' <<< "$json_output")
-
-        
+        ip_address=$(openstack server show "$devserver_name" -f value -c addresses | awk -F '[=;]' '{print $2}')  
+        echo "$ip_address" 
         echo " " >> $sshconfig
         echo "Host $devserver_name" >> $sshconfig
         echo "   User ubuntu" >> $sshconfig
@@ -219,6 +240,3 @@ echo " " >> $hostsfile
 echo "[all:vars]" >> $hostsfile
 echo "ansible_user=ubuntu" >> $hostsfile
 echo "#ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
-
-# config_file="$(dirname "$0")/config"
-# ssh -F "$config_file"
