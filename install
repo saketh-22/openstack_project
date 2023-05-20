@@ -176,8 +176,10 @@ if(($required_dev_servers > $devservers_count)); then
         json_output=$(openstack server list --long -f json)
 
         # Use jq to extract the IP addresses based on server name and network name
-        ip_address=$(jq -r --arg server "$devserver_name" --arg network "$network_name" \
-        'map(select(.Name == $server).Networks[$network][0]) | .[]' <<< "$json_output")
+        ip_address=$(openstack server show "$devserver_name" -f value -c addresses | awk -F '[=;]' '{print $2}')
+
+        # ip_address=$(jq -r --arg server "$devserver_name" --arg network "$network_name" \
+        # 'map(select(.Name == $server).Networks[$network][0]) | .[]' <<< "$json_output")
 
         
         echo " " >> $sshconfig
