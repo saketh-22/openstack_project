@@ -91,7 +91,7 @@ else
     do
         if [[ "${subnet_list[$i]}" == $tag_name_.* ]]; then
               subnet_delete=$(openstack subnet delete "${subnet_list[$i]}")
-              display_log "Deleted subnet "${subnet_list[$i]}""
+              echo "Deleted subnet "${subnet_list[$i]}""
         fi
   done 
 fi
