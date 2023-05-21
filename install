@@ -109,8 +109,6 @@ fi
 
 # create floating ip for bastion and haproxy
 # Check if there are unassigned floating IPs
-unassigned_ips=$(openstack floating ip list --status DOWN -f value -c "Floating IP Address")
-
 if [[ -n "$unassigned_ips" ]]; then
   fip1=$(echo "$unassigned_ips" | head -n 1)
   fip2=$(echo "$unassigned_ips" | sed -n 2p)
@@ -149,7 +147,7 @@ echo "   StrictHostKeyChecking no" >> $sshconfig
 echo "   PasswordAuthentication no" >> $sshconfig
 
 if [[ "$existing_servers" == *"$haproxy_server"* ]]; then
-        echo "$(date) $haproxy_server already exists"
+        echo "$(date) HAproxy already exists"
 else 
     haproxy=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
     haproxy2=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server2 --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
@@ -177,6 +175,8 @@ echo "   PasswordAuthentication no ">> $sshconfig
 # generate hosts file
 echo "[HAproxy]" >> $hostsfile
 echo "$haproxy_server" >> $hostsfile
+echo "$haproxy_server2" >> $hostsfile
+
 echo " " >> $hostsfile
 echo "[webservers]" >> $hostsfile
 
@@ -192,6 +192,7 @@ if(($required_dev_servers > $devservers_count)); then
         server_output=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name)
         echo "$(date) Created $devserver_name server"
         ((devservers_to_add--))
+        
         active=false
         while [ "$active" = false ]; do
             server_status=$(openstack server show "$devserver_name" -f value -c status)
@@ -200,8 +201,16 @@ if(($required_dev_servers > $devservers_count)); then
             fi
         done
 
+<<<<<<< HEAD
+        ip_address=$(openstack server list --name $devserver_name -c Networks -f value | grep -Po  '\d+\.\d+\.\d+\.\d+')
+=======
         #ip_address=$(openstack server list --long -f json | jq -r --arg server "$devserver_name" --arg network "$network_name" '.[] | select(.Name == $server) | .Networks[$network][0]')
         ip_address=$(openstack server show "$devserver_name" -f value -c addresses | grep -Po  '\d+\.\d+\.\d+\.\d+')  
+<<<<<<< Updated upstream
+=======
+        echo "$ip_address" 
+>>>>>>> 0ef89fa95a7ef8e428fed4a72f9354fe2ec6ca3b
+>>>>>>> Stashed changes
         echo " " >> $sshconfig
         echo "Host $devserver_name" >> $sshconfig
         echo "   User ubuntu" >> $sshconfig
@@ -239,3 +248,5 @@ echo " " >> $hostsfile
 echo "[all:vars]" >> $hostsfile
 echo "ansible_user=ubuntu" >> $hostsfile
 echo "#ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
+
+ansible-playbook -i hosts site.yaml
