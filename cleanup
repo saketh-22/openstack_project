@@ -109,7 +109,7 @@ else
 fi
 
 # Delete security groups
-security_group=$(openstack network list --tag $tag_name -f value -c Name)
+security_group=$(openstack security group list --tag $tag_name -f value -c Name)
 if [ -n "$security_group" ]; then
   for sec in $security_group; do
     openstack security group delete "$sec"
