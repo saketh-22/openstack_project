@@ -10,10 +10,11 @@ echo "$current_date_time Starting deployment of $tag_name using $rc_file for cre
 source $rc_file
 
 # Define variables
-existing_networ="$2_network"
-subnet_ksexisting_networksname="$2_subnet"
+
+network_name="$2_network"
+subnet_name="$2_subnet"
 keypair_name="$2_key"
-existing_routers="$2_router"
+router_name="$2_router"
 security_group_name="$2_security_group"
 haproxy_server="$2_HAproxy"
 haproxy_server2="$2_HAproxy2"
@@ -23,108 +24,99 @@ sshconfig="config"
 knownhosts="known_hosts"
 hostsfile="hosts"
 
-
-# delete keypair 
-existing_keypairs=$(openstack keypair list -f value -c Name)
-keypair_list=(${existing_keypairs// / })
-if [[ " ${keypair_list[*]} " =~ " ${keypair_name} " ]]; then
-  deleted_keypair=$(openstack keypair delete "${keypair_name}")
-  echo "$(date) Deleted key pair $keypair_name"
-fi
-
-# delete floating ip
-existing_floating_ip=$(openstack floating ip list --status DOWN -f value -c "Floating IP Address")
-floating_ip_list=(${existing_floating_ip// / })
-
-if [ ${#floating_ip_list[@]} -eq 0 ]; then
-    echo "$(date) No floating ips are there to delete. "
-else
-    for ((i=0; i<${#floating_ip_list[@]}; i++ ))
-      do
-          delete_fip=$(openstack floating ip delete "${floating_ip_list[$i]}" ) 
-          echo "$(date) Deleted the floating ip address  "${floating_ip_list[$i]}" "
-    done
-fi
-
-
 # Get the list of servers matching the keyword
 servers=$(openstack server list --name "$tag_name" -c ID -f value)
-
+n=$(echo "$servers" | wc -l)
 # Loop through each server and delete it
-if [ -n $servers ]; then
+if [ -n "$servers" ]; then
+  echo "$(date) Found $n server(s), deleting them"
   for server_id in $servers; do
-    echo " $(date) Deleting servers"
     openstack server delete $server_id
   done
+  echo "$(date) Deleted servers"
 else
   echo "$(date) No servers exist to delete"
 fi
 
+# delete keypair 
+
+# keypairs=$(openstack keypair list -f value -c Name)
+keypairs=$(openstack keypair list -f value -c Name | grep "$tag_name.*")
+# echo "$keypairs"
+
+if [ -n "$keypairs" ]; then
+  for key in $keypairs; do    #deletes all keypairs with same tag
+    openstack keypair delete $key
+  done
+  echo "$(date) Deleted keypair $keypair_name"
+else
+  echo "$(date) No $keypair_name exist to delete"
+fi
+
+# delete floating ip
+floating_ip=$(openstack floating ip list --status DOWN -f value -c "Floating IP Address")
+# floating_ip_list=(${existing_floating_ip// / })
+
+if [ -n "$floating_ip" ]; then
+  for fip in $floating_ip; do
+    openstack floating ip delete "$fip"
+  done
+  echo "$(date) Deleted Floating ips"
+else
+  echo "$(date) No floating ips to remove"
+fi
+
+
+# Disconnect subnet & remove subnet
+
+# subnet_id=$(openstack router show "$router_name" -f json -c interfaces_info | grep -oP '(?<="subnet_id": ")[^"]+' | awk '{print $1}')
+
+subnet_id=$(openstack subnet list --tag "$tag_name" -c ID -f value)
+if [ -n "$subnet_id" ]; then
+  for sub in $subnet_id; do
+    openstack router remove subnet "$router_name" "$sub"
+    openstack subnet delete "$sub"
+  done
+  echo "$(date) Deleted subnet $subnet_name"
+else
+  echo "$(date) No subnet $subnet_name to remove"
+fi
+
+# remove_ext_gateway=$(openstack router unset --external-gateway $existing_routers) 
 
 # Delete router
-existing_routers=$(openstack router list --tag $tag_name -f value -c Name)
-router_list=(${existing_routers// / })
 
-if [ ${#router_list[@]} -eq 0 ]; then
-  echo "$(date) No router exists to delte"
-else
-  for ((i=0; i<${#router_list[@]}; i++ ))
-    do
-      if [[ "${router_list[$i]}" =~ ^$tag_name_.* ]]; then
-        subnet_present=$(openstack router show "${router_list[$i]}" -c interfaces_info -f json | jq -r '.interfaces_info' | jq -r '.[].subnet_id')  
-        remove_ext_gateway=$(openstack router unset --external-gateway $existing_routers) 
-        remove_subnet=$(openstack router remove subnet $existing_routers $subnet_present )  
-        delete_router=$(openstack router delete "${router_list[$i]}" 2> /dev/null)  
-        echo "$(date) Deleted router "${router_list[$i]}""
-      fi
+routers=$(openstack router list --tag $tag_name -f value -c Name)
+if [ -n "$routers" ]; then
+  for r in $routers; do
+    openstack router delete "$r"
   done
+  echo "$(date) Deleted router $router_name"
+else
+  echo "$(date) No router $router_name to remove"
 fi
 
-# delete subnet
-existing_subnets==$(openstack subnet list --tag $tag_name -f value -c Name)
-subnet_list=(${existing_subnets// / })
 
-if [ ${#subnet_list[@]} -eq 0 ]; then
-  echo " $(date) No subnets exist to delete."
+# Delete network
+networks=$(openstack network list --tag $tag_name -f value -c Name)
+if [ -n "$networks" ]; then
+  for net in $networks; do
+    openstack network delete "$net"
+  done
+  echo "$(date) Deleted network $network_name"
 else
-  for ((i=0; i<${#subnet_list[@]}; i++ ))
-    do
-        if [[ "${subnet_list[$i]}" == $tag_name_.* ]]; then
-              subnet_delete=$(openstack subnet delete "${subnet_list[$i]}")
-              echo "Deleted subnet "${subnet_list[$i]}""
-        fi
-  done 
+  echo "$(date) No network $network_name to remove"
 fi
 
-# delete network 
-existing_networks=$(openstack network list --tag $tag_name -f value -c Name)
-network_list=(${existing_networks// / })
-
-if [ ${#network_list[@]} -eq 0 ]; then
-  echo " $(date) No networks exist to delete"
+# Delete security groups
+security_group=$(openstack network list --tag $tag_name -f value -c Name)
+if [ -n "$security_group" ]; then
+  for sec in $security_group; do
+    openstack security group delete "$sec"
+  done
+  echo "$(date) Deleted security group $security_group_name"
 else
-  for ((i=0; i<${#network_list[@]}; i++ ))
-    do
-        if [[ "${network_list[$i]}" =~ ^$tag_name_network.* ]]; then
-              network_delete=$(openstack network delete "${network_list[$i]}")
-              echo "Deleted network "${network_list[$i]}""
-        fi
-  done 
-fi
-
-# delete security groups
-existing_security_groups=$(openstack security group list --tag one -f value -c Name)
-security_group_list=(${existing_security_groups// /})
-if [ ${#existing_security_groups[@]} -eq 0 ]; then
-  echo " $(date) No security groups exist to delete"
-else
-  for ((i=0; i<${#security_group_list[@]}; i++ ))
-    do
-        if [[ "${security_group_list[$i]}" =~ ^$tag_name_.* ]]; then
-              security_group_delete=$(openstack security group delete "${security_group_list[$i]}")
-              echo "Deleted security group "${security_group_list[$i]}""
-        fi
-  done 
+  echo "$(date) No security group $security_group_name to remove"
 fi
 
 if [[ -f "$sshconfig" ]] ; then
@@ -135,6 +127,14 @@ if [[ -f "$knownhosts" ]] ; then
     rm "$knownhosts"
 fi
 
-if [[ -f "$hostsfile" ]] ; then
-    rm "$hostsfile"
+if [[ -f "floating_ip1" ]] ; then
+    rm "floating_ip1"
 fi
+
+if [[ -f "floating_ip2" ]] ; then
+    rm "floating_ip2"
+fi
+
+# if [[ -f "$hostsfile" ]] ; then
+#     rm "$hostsfile"
+# fi
