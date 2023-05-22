@@ -117,14 +117,14 @@ else
    if [[ -n "$unassigned_ips" ]]; then
         fip1=$(echo "$unassigned_ips" | awk '{print $1}')
         if [[ -n "$fip1" ]]; then
-            echo " $(date) Created floating ip for bastion server"
+            echo "$(date) Created floating ip for bastion server"
         else
-            echo " $(date) Creating floating ip for bastion"
+            echo "$(date) Creating floating ip for bastion"
             created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
             fip1="$(cat floating_ip1)"
         fi
     else
-            echo " $(date) Creating floating ip for bastion"
+            echo "$(date) Creating floating ip for bastion"
             created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
             fip1="$(cat floating_ip1)"
     fi
@@ -140,7 +140,8 @@ else
     if [[ -n "$unassigned_ips" ]]; then
         fip2=$(echo "$unassigned_ips" | awk '{print $2}')
         if [[ -n "$fip2" ]]; then
-            echo " $(date) Created floating ip for HAproxy server"
+            echo "
+            $(date) Created floating ip for HAproxy server"
         else
             echo " $(date) Creating floating ip for HAproxy"
             created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
@@ -188,7 +189,7 @@ elif (( $required_dev_servers < $devservers_count )); then
     devservers_to_remove=$(($devservers_count - $required_dev_servers))
     sequence1=0
     while [[ $sequence1 -lt $devservers_to_remove ]]; do
-        server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | 'grep -m1 -oP "${tag_name}"'_dev([1-9]+))     
+        server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | grep -m1 -oP "${tag_name}"'_dev([1-9]+)')   
         deleted_server=$(openstack server delete "$server_to_delete" --wait)
         echo " $(date) Deleted $server_to_delete server"
         ((sequence1++))
@@ -202,6 +203,7 @@ bastionfip=$(openstack server list --name $bastion_server -c Networks -f value |
 haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
 haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
 
+echo "$(date) Generating config file"
 echo "Host $bastion_server" >> $sshconfig
 echo "   User ubuntu" >> $sshconfig
 echo "   HostName $bastionfip" >> $sshconfig
@@ -238,7 +240,6 @@ active_servers=$(openstack server list --status ACTIVE -f value -c Name | grep -
 echo "$active_Servers"
 # Loop through each active server and extract its IP address
 for server in $active_servers; do
-        echo "$server" 
         ip_address=$(openstack server list --name $server -c Networks -f value | grep -Po  '\d+\.\d+\.\d+\.\d+')
         echo " " >> $sshconfig
         echo "Host $server" >> $sshconfig
@@ -248,7 +249,7 @@ for server in $active_servers; do
         echo "   UserKnownHostsFile=~/dev/null" >> $sshconfig
         echo "   StrictHostKeyChecking no" >> $sshconfig
         echo "   PasswordAuthentication no" >> $sshconfig
-        echo "   ProxyCommand ssh -W %h:%p $bastion_server" >> $sshconfig 
+        echo "   ProxyJump $bastion_server" >> $sshconfig 
 
         echo "$server" >> $hostsfile
 done
@@ -259,5 +260,5 @@ echo "ansible_user=ubuntu" >> $hostsfile
 echo "ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
 echo "ansible_ssh_common_args=' -F $sshconfig '" >> $hostsfile
 
-echo " $(date) Running ansible playbook"
+echo "$(date) Running ansible playbook"
 ansible-playbook -i "$hostsfile" site.yaml
