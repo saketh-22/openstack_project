@@ -1,138 +1,159 @@
-
 ---
--
-  hosts: webservers
-  become: yes
-  gather_facts: yes
-
-  tasks:
-
-  - name: Remove apt lock frontend file
-    file:
-      state: absent
-      path: "/var/lib/dpkg/lock-frontend"
-    become: yes
-  - name: Remove apt lock file
-    file:
-      state: absent
-      path: "/var/lib/dpkg/*"
-    become: yes
-
-  - name: Updating apt cache
-    become: true
-    apt:
-      update_cache: true
-
-  - name: installing pip3
-    become: true
-    apt:
-      name: python3-pip
-      state: latest
-
-  - name: install flask with pip
-    pip: name=flask
-
-  - name: copy the code
-    copy: 
-      src: service.py 
-      dest: /service.py
-
-  - name: installing gunicorn
-    apt:
-      name: gunicorn
-
-  - name: installing snmpd
-    apt:
-      name: snmpd
-      state: latest
-
-  - name: Configuring of snmpd 
-    template:
-      src: "./snmpd.conf"
-      dest: "/etc/snmp/snmpd.conf"
-
-  - name: restarting snmpd
-    service:
-      name: snmpd
-      state: restarted
-      enabled: yes
-
-  - name: copy service.py
-    copy:
-      src: service.py
-      dest: /home/ubuntu/service.py
-      owner: ubuntu
-
-  - name: Run Flask app
-    shell: gunicorn -w 2 -D -b 0.0.0.0:8080 service:app
-
-# haproxy configuration
 
 - hosts: all
   gather_facts: yes
-- hosts: HAproxy
   become: yes
+    
+  tasks:
+    - name: apt update
+      apt:
+        update_cache: true
 
+- name: Configuring HAproxy loadbalancer
+  hosts: HAproxy
+  become: yes
+  
   tasks:
 
-  - name: updating apt cache
-    become: true
-    apt:
-      update_cache: true
+      
+    - name : sudo wait
+      become: yes
+      shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;
 
-  - name: installing haproxy
-    become: true
-    apt:
-      name: haproxy
-      state: latest
+    - name: Installing HAproxy
+      apt:
+        name: haproxy
+        state: present
+        update_cache: true
+      
+    - name: Installing keepalived
+      apt:
+        name: keepalived
+        state: present
+        update_cache: true
 
-  - name: deploy haproxy configuration
-    template:
-      src: /$PWD/haproxy.cfg.j2
-      dest: /etc/haproxy/haproxy.cfg
+    - name: gather server ip addresses
+      setup:
+            filter: ansible_default_ipv4.address     
+         
+    
+    - name: copy files haproxy.cfg
+      template:
+        src: haproxy.cfg.j2
+        dest: "/etc/haproxy/haproxy.cfg"
+      notify:
+        - restart haproxy
 
-  - name: restarting Haproxy
-    service:
-      name: haproxy
-      state: restarted
-        
- #nginx
-  - name: install nginx 
-    package: name=nginx state=latest
+    
 
-  - name: create nginx config file
-    template:
-        src: nginx.conf
-        dest: "/etc/nginx/nginx.conf"
-    notify:
-      - restart nginx
+    - name: install nginx, snmp, snmp-mibs-downloader
+      apt: 
+        update_cache: yes
+        name: [ 'nginx', 'snmp', 'snmp-mibs-downloader' ] 
+        state: latest
 
+    - name: copy nginx config files
+      template:
+         src: nginx.conf.j2
+         dest: "/etc/nginx/nginx.conf"
 
-#snmp
-  - name: install snmpd
-    apt:
-      name: snmpd
-      state: present
-
-  - name: copy snmpd.conf file
-    template: 
-      src="./snmpd.conf"
-      dest="/etc/snmp/snmpd.conf"
-
-  - name: restart snmpd
-    service:
-       name: snmpd
-       state: restarted
-    become: yes
-
-  handlers:
-    - name: restart nginx
+    - name: nginx start
       service:
         name: nginx
         state: restarted
 
+  handlers:
+
+    - name: restart haproxy
+      service:
+       name: haproxy
+       state: restarted
+
+    - name: restart keepalived
+      service:
+        name: keepalived
+        state: restarted
+
+- hosts: primary_proxy
+  become: yes
+  vars:
+    node_state: MASTER
+    node_priority: 101
+    virtual_ip: "{{ lookup('file', './floating_ip2') }}"
+  tasks:
+    - name: configure keepalived
+      template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+    
+    - name: restart keepalived
+      service:
+        name: keepalived
+        state: restarted
+
+
+- hosts: backup_proxy
+  become: yes
+  vars:
+    node_state: BACKUP
+    node_priority: 100
+    virtual_ip: "{{ lookup('file', './floating_ip2') }}"
+  tasks:
+    - name: configure keepalived
+      template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+    - name: restart keepalived
+      service:
+        name: keepalived
+        state: restarted
+
+
 - hosts: webservers
   become: yes
-  gather_facts: yes
+  tasks:
+    - name: install pip
+      apt:
+        name: python3-pip
+        state: present
+    
+    - name: install flask
+      pip:
+        executable: pip3
+        name: flask
+        state: latest
+    - name: install gunicorn
+      pip:
+        executable: pip3
+        name: gunicorn
+        state: latest
+
+    - name: createnew directory
+      file:
+              path: "/home/flask-app/"
+              state: directory
+
+    - name: copy app.py to webservers
+      template:
+        src: "service.py"
+        dest: "/home/flask-app/app.py"
 
 
+    - name: start flask app
+      shell: |
+        cd /home/flask-app/
+        gunicorn --bind 0.0.0.0:5000 app:app&  
+
+    - name: install snmpd
+      apt:
+              name: snmpd
+              state: latest
+    
+    - name: cpy snmpd conf file
+      template:
+              src: snmpd.conf.j2
+              dest: "/etc/snmp/snmpd.conf"
+    - name: run snmpd
+      service:
+              name: snmpd
+              state: restarted    

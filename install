@@ -155,7 +155,7 @@ else
     haproxy=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
     haproxy2=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server2 --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
     add_haproxy_fip=$(openstack server add floating ip $haproxy_server $fip2)
-    add_haproxy2_fip=$(openstack server add floating ip $haproxy_server2 $fip2)
+    # add_haproxy2_fip=$(openstack server add floating ip $haproxy_server2 $fip2)
     echo "$(date) created two HAproxy servers"
 fi
 
@@ -201,7 +201,7 @@ fi
 
 bastionfip=$(openstack server list --name $bastion_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
 haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
-haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
+haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+')
 
 echo "$(date) Generating config file"
 echo "Host $bastion_server" >> $sshconfig
@@ -218,6 +218,7 @@ echo "   HostName $haproxyfip" >> $sshconfig
 echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
 echo "   StrictHostKeyChecking no" >> $sshconfig
 echo "   PasswordAuthentication no ">> $sshconfig
+echo "   ProxyJump $bastion_server" >> $sshconfig
 
 echo " " >> $sshconfig
 echo "Host $haproxy_server2" >> $sshconfig
@@ -226,6 +227,7 @@ echo "   HostName $haproxyfip2" >> $sshconfig
 echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
 echo "   StrictHostKeyChecking no" >> $sshconfig
 echo "   PasswordAuthentication no ">> $sshconfig
+echo "   ProxyJump $bastion_server" >> $sshconfig
 
 # generate hosts file
 echo "[HAproxy]" >> $hostsfile
@@ -253,6 +255,13 @@ for server in $active_servers; do
 
         echo "$server" >> $hostsfile
 done
+
+echo " " >> $hostsfile
+echo "[primary_proxy]" >> $hostsfile
+echo "$haproxy_server" >> $hostsfile
+echo " " >> $hostsfile
+echo "[backup_proxy]" >> $hostsfile
+echo "$haproxy_server2" >> $hostsfile
 
 echo " " >> $hostsfile
 echo "[all:vars]" >> $hostsfile

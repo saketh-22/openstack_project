@@ -135,6 +135,6 @@ if [[ -f "floating_ip2" ]] ; then
     rm "floating_ip2"
 fi
 
-# if [[ -f "$hostsfile" ]] ; then
-#     rm "$hostsfile"
-# fi
+if [[ -f "$hostsfile" ]] ; then
+    rm "$hostsfile"
+fi
