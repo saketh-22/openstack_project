@@ -12,6 +12,7 @@ keypair_name="$2_key"
 router_name="$2_router"
 security_group_name="$2_security_group"
 haproxy_server="$2_HAproxy"
+haproxy_server2="$2_HAproxy2"
 bastion_server="$2_bastion"
 dev_server="$2_dev"
 sshconfig="config"
@@ -29,7 +30,15 @@ do
     existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
     devservers_count=$(grep -c $dev_server <<< $existing_servers)
     echo "$(date) Have $devservers_count dev servers"
-
+    
+    if [[ -f "$hostsfile" ]] ; then
+    rm "$hostsfile"
+    fi
+        
+    if [[ -f "$sshconfig" ]] ; then
+        rm "$sshconfig"
+    fi
+    
     if(($required_dev_servers > $devservers_count)); then
         devservers_to_add=$(($required_dev_servers - $devservers_count))
         echo "$(date) Creating $devservers_to_add more dev servers ..."
@@ -37,7 +46,7 @@ do
         devserver_name=${dev_server}${sequence}
         while [ $devservers_to_add -gt 0 ]
         do   
-            openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name" 
+            server_create=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name")
             echo "$(date) Created $devserver_name server"
             ((devservers_to_add--))
             sequence=$(( $sequence+1 ))
@@ -49,16 +58,18 @@ do
                 fi
             done
 
-            ip_address=$(openstack server list --name $devserver_name -c Networks -f value | grep -Po  '\d+\.\d+\.\d+\.\d+')
-            echo " " >> $sshconfig.Networks[$network][0] // ""
-            echo "Host $devserver_name" >> $sshconfig
-            echo "   User ubuntu" >> $sshconfig
-            echo "   HostName $ip_address" >> $sshconfig
-            echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
-            echo "   UserKnownHostsFile=~/dev/null" >> $sshconfig
-            echo "   StrictHostKeyChecking no" >> $sshconfig
-            echo "   PasswordAuthentication no" >> $sshconfig
-            echo "   ProxyCommand ssh -W %h:%p $bastion_server" >> $sshconfig 
+            # ip_address=$(openstack server list --name $devserver_name -c Networks -f value | grep -Po  '\d+\.\d+\.\d+\.\d+')
+            # echo " " >> $sshconfig.Networks[$network][0] // ""
+            # echo "Host $devserver_name" >> $sshconfig
+            # echo "   User ubuntu" >> $sshconfig
+            # echo "   HostName $ip_address" >> $sshconfig
+            # echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+            # echo "   UserKnownHostsFile=~/dev/null" >> $sshconfig
+            # echo "   StrictHostKeyChecking no" >> $sshconfig
+            # echo "   PasswordAuthentication no" >> $sshconfig
+            # echo "   ProxyCommand ssh -W %h:%p $bastion_server" >> $sshconfig 
+
+            # echo "$devserver_name" >> $hostsfile
             devserver_name=${dev_server}${sequence}
 
         done
@@ -68,14 +79,77 @@ do
             while [[ $sequence1 -lt $devservers_to_remove ]]; do
                 server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | grep -m1 -oP "${tag_name}"'_dev([1-9]+)')     
                 deleted_server=$(openstack server delete "$server_to_delete" --wait)
-                echo " $(date) Deleted $server_to_delete server"
+                echo "$(date) Deleted $server_to_delete server"
                 ((sequence1++))
             done
         else
             echo "Required number of dev servers($required_dev_servers) already exist."
         fi
+    echo "$(date) Generating config file"
+    bastionfip=$(openstack server list --name $bastion_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
+    haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
+    haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
+
+    echo "$(date) Generating config file"
+    echo "Host $bastion_server" >> $sshconfig
+    echo "   User ubuntu" >> $sshconfig
+    echo "   HostName $bastionfip" >> $sshconfig
+    echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+    echo "   StrictHostKeyChecking no" >> $sshconfig
+    echo "   PasswordAuthentication no" >> $sshconfig
+
+    echo " " >> $sshconfig
+    echo "Host $haproxy_server" >> $sshconfig
+    echo "   User ubuntu" >> $sshconfig
+    echo "   HostName $haproxyfip" >> $sshconfig
+    echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+    echo "   StrictHostKeyChecking no" >> $sshconfig
+    echo "   PasswordAuthentication no ">> $sshconfig
+
+    echo " " >> $sshconfig
+    echo "Host $haproxy_server2" >> $sshconfig
+    echo "   User ubuntu" >> $sshconfig
+    echo "   HostName $haproxyfip2" >> $sshconfig
+    echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+    echo "   StrictHostKeyChecking no" >> $sshconfig
+    echo "   PasswordAuthentication no ">> $sshconfig
+
+    # generate hosts file
+    echo "[HAproxy]" >> $hostsfile
+    echo "$haproxy_server" >> $hostsfile
+    echo "$haproxy_server2" >> $hostsfile
+
+    echo " " >> $hostsfile
+    echo "[webservers]" >> $hostsfile
+
+    # Get the list of active servers
+    active_servers=$(openstack server list --status ACTIVE -f value -c Name | grep -oP "${tag_name}"'_dev([1-9]+)')
+    echo "$active_Servers"
+    # Loop through each active server and extract its IP address
+    for server in $active_servers; do
+            ip_address=$(openstack server list --name $server -c Networks -f value | grep -Po  '\d+\.\d+\.\d+\.\d+')
+            echo " " >> $sshconfig
+            echo "Host $server" >> $sshconfig
+            echo "   User ubuntu" >> $sshconfig
+            echo "   HostName $ip_address" >> $sshconfig
+            echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+            echo "   UserKnownHostsFile=~/dev/null" >> $sshconfig
+            echo "   StrictHostKeyChecking no" >> $sshconfig
+            echo "   PasswordAuthentication no" >> $sshconfig
+            echo "   ProxyJump $bastion_server" >> $sshconfig 
+
+            echo "$server" >> $hostsfile
+    done
+
+    echo " " >> $hostsfile
+    echo "[all:vars]" >> $hostsfile
+    echo "ansible_user=ubuntu" >> $hostsfile
+    echo "ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
+    echo "ansible_ssh_common_args=' -F $sshconfig '" >> $hostsfile
+
     echo "Entering into sleep mode"
     sleep 10
 done
+
 
 
