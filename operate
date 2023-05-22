@@ -22,70 +22,7 @@ hostsfile="hosts"
 echo "Running Operation mode for tag: $tag_name using $rc_file for credentials"
 source $rc_file
 
-while true
-do
-    required_dev_servers=$(cat servers.conf)
-    echo "$(date) Reading server.conf, we need $required_dev_servers dev nodes"
-
-    existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
-    devservers_count=$(grep -c $dev_server <<< $existing_servers)
-    echo "$(date) Have $devservers_count dev servers"
-    
-    if [[ -f "$hostsfile" ]] ; then
-    rm "$hostsfile"
-    fi
-        
-    if [[ -f "$sshconfig" ]] ; then
-        rm "$sshconfig"
-    fi
-    
-    if(($required_dev_servers > $devservers_count)); then
-        devservers_to_add=$(($required_dev_servers - $devservers_count))
-        echo "$(date) Creating $devservers_to_add more dev servers ..."
-        sequence=$(( $devservers_count+1 ))
-        devserver_name=${dev_server}${sequence}
-        while [ $devservers_to_add -gt 0 ]
-        do   
-            server_create=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name")
-            echo "$(date) Created $devserver_name server"
-            ((devservers_to_add--))
-            sequence=$(( $sequence+1 ))
-            active=false
-            while [ "$active" = false ]; do
-                server_status=$(openstack server show "$devserver_name" -f value -c status)
-                if [ "$server_status" == "ACTIVE" ]; then
-                    active=true
-                fi
-            done
-
-            # ip_address=$(openstack server list --name $devserver_name -c Networks -f value | grep -Po  '\d+\.\d+\.\d+\.\d+')
-            # echo " " >> $sshconfig.Networks[$network][0] // ""
-            # echo "Host $devserver_name" >> $sshconfig
-            # echo "   User ubuntu" >> $sshconfig
-            # echo "   HostName $ip_address" >> $sshconfig
-            # echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
-            # echo "   UserKnownHostsFile=~/dev/null" >> $sshconfig
-            # echo "   StrictHostKeyChecking no" >> $sshconfig
-            # echo "   PasswordAuthentication no" >> $sshconfig
-            # echo "   ProxyCommand ssh -W %h:%p $bastion_server" >> $sshconfig 
-
-            # echo "$devserver_name" >> $hostsfile
-            devserver_name=${dev_server}${sequence}
-
-        done
-        elif (( $required_dev_servers < $devservers_count )); then
-            devservers_to_remove=$(($devservers_count - $required_dev_servers))
-            sequence1=0
-            while [[ $sequence1 -lt $devservers_to_remove ]]; do
-                server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | grep -m1 -oP "${tag_name}"'_dev([1-9]+)')     
-                deleted_server=$(openstack server delete "$server_to_delete" --wait)
-                echo "$(date) Deleted $server_to_delete server"
-                ((sequence1++))
-            done
-        else
-            echo "Required number of dev servers($required_dev_servers) already exist."
-        fi
-    echo "$(date) Generating config file"
+generate_config(){
     bastionfip=$(openstack server list --name $bastion_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
     haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
     haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
@@ -146,10 +83,70 @@ do
     echo "ansible_user=ubuntu" >> $hostsfile
     echo "ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
     echo "ansible_ssh_common_args=' -F $sshconfig '" >> $hostsfile
+}
+
+delete_config(){
+    if [[ -f "$hostsfile" ]] ; then
+    rm "$hostsfile"
+    fi
+        
+    if [[ -f "$sshconfig" ]] ; then
+        rm "$sshconfig"
+    fi
+    
+}
+while true
+do
+    required_dev_servers=$(cat servers.conf)
+    echo "$(date) Reading server.conf, we need $required_dev_servers dev nodes"
+
+    existing_servers=$(openstack server list --status ACTIVE --column Name -f value)
+    devservers_count=$(grep -c $dev_server <<< $existing_servers)
+    echo "$(date) Have $devservers_count dev servers"
+    
+
+    if(($required_dev_servers > $devservers_count)); then
+        devservers_to_add=$(($required_dev_servers - $devservers_count))
+        echo "$(date) Creating $devservers_to_add more dev servers ..."
+        sequence=$(( $devservers_count+1 ))
+        devserver_name=${dev_server}${sequence}
+        
+        while [ $devservers_to_add -gt 0 ]
+        do   
+            server_create=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name")
+            echo "$(date) Created $devserver_name server"
+            ((devservers_to_add--))
+            sequence=$(( $sequence+1 ))
+            active=false
+            while [ "$active" = false ]; do
+                server_status=$(openstack server show "$devserver_name" -f value -c status)
+                if [ "$server_status" == "ACTIVE" ]; then
+                    active=true
+                fi
+            done
+            devserver_name=${dev_server}${sequence}
+
+        done
+        elif (( $required_dev_servers < $devservers_count )); then
+            devservers_to_remove=$(($devservers_count - $required_dev_servers))
+            sequence1=0
+            while [[ $sequence1 -lt $devservers_to_remove ]]; do
+                server_to_delete=$(openstack server list --status ACTIVE -f value -c Name | grep -m1 -oP "${tag_name}"'_dev([1-9]+)')     
+                deleted_server=$(openstack server delete "$server_to_delete" --wait)
+                echo "$(date) Deleted $server_to_delete server"
+                ((sequence1++))
+            done
+        else
+            echo "Required number of dev servers($required_dev_servers) already exist."
+        fi
+        if [ "$required_dev_servers" == "$devservers_count" ]; then
+            delete_config
+            generate_config
+        fi
+
 
     echo "Entering into sleep mode"
     sleep 10
 done
-
 
 
