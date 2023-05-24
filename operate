@@ -149,5 +149,3 @@ do
     echo "Entering into sleep mode"
     sleep 10
 done
-
-
