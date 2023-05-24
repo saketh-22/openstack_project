@@ -85,11 +85,6 @@
       template:
         src: keepalived.conf.j2
         dest: /etc/keepalived/keepalived.conf
-    
-    - name: restart keepalived
-      service:
-        name: keepalived
-        state: restarted
 
 
 - hosts: backup_proxy
@@ -103,11 +98,15 @@
       template:
         src: keepalived.conf.j2
         dest: /etc/keepalived/keepalived.conf
+    
+- name: Restart Keepalived
+  hosts: HAproxy
+  become: yes
+  tasks:
     - name: restart keepalived
       service:
         name: keepalived
         state: restarted
-
 
 - hosts: webservers
   become: yes

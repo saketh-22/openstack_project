@@ -208,6 +208,7 @@ echo "Host $bastion_server" >> $sshconfig
 echo "   User ubuntu" >> $sshconfig
 echo "   HostName $bastionfip" >> $sshconfig
 echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
+echo "   UserKnownHostsFile /dev/null" >> $sshconfig
 echo "   StrictHostKeyChecking no" >> $sshconfig
 echo "   PasswordAuthentication no" >> $sshconfig
 
