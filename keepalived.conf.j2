@@ -1,8 +1,7 @@
-
-vrrp_script check_haproxy {
-  script "killall -0 haproxy"
-  interval 2
-  weight 2
+vrrp_script chk_haproxy {
+  script "killall -0 haproxy" # check the haproxy process
+  interval 2 # every 2 seconds
+  weight 2 # add 2 points if OK
 }
 
 vrrp_instance VI_1 {
@@ -11,14 +10,13 @@ vrrp_instance VI_1 {
     virtual_router_id 51
     priority {{ node_priority }}
     advert_int 1
-    authentication {
-        auth_type PASS
-        auth_pass 12345
-    }
+    
     virtual_ipaddress {
-        {{ virtual_ip }}
+        {{ virtual_ip }}/24 brd 10.10.0.255 dev eth0
     }
+    
     track_script {
-        check_haproxy
-    }
+     chk_haproxy
+  }
 }
+

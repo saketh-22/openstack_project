@@ -35,7 +35,7 @@ defaults
 
 
 frontend haproxynode
-        bind :5000
+        bind *:5000
         mode http
         default_backend backendnodes
 

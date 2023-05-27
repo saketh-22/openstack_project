@@ -18,6 +18,7 @@ haproxy_server="$2_HAproxy"
 haproxy_server2="$2_HAproxy2"
 bastion_server="$2_bastion"
 dev_server="$2_dev"
+vip_port="$2_vip" #virtual ip port
 sshconfig="config"
 knownhosts="known_hosts"
 hostsfile="hosts"
@@ -63,10 +64,9 @@ else
     created_router=$(openstack router create --tag $tag_name $router_name )
     echo "$(date) Created router $router_name"
     # add subnet and externel gateway to the router
-    add_subnet=$(openstack router add subnet $router_name $subnet_name)
     set_gateway=$(openstack router set --external-gateway ext-net $router_name)
+    add_subnet=$(openstack router add subnet $router_name $subnet_name)
 fi
-
 
 # check if security group already exists
 existing_security_groups=$(openstack security group list --tag $tag_name -f value)
@@ -80,6 +80,8 @@ then
     rule4=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 8080 --protocol tcp --ingress $security_group_name)
     rule5=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 6000 --protocol udp --ingress $security_group_name)
     rule6=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name)
+    rule7=$(openstack security group rule create --protocol 112 $security_group_name) #VVRP protocol
+
     echo "$(date) Created security group $security_group_name"
 else
     echo "$(date) $security_group_name already exists"
@@ -105,6 +107,8 @@ fi
 #     rm "$f2"
 # fi
 
+## Create port for Virtual IP
+vip=$(openstack port create --network "$network_name" --fixed-ip subnet="$subnet_name" --no-security-group "$vip_port" )
 
 unassigned_ips=$(openstack floating ip list --status DOWN -f value -c "Floating IP Address")
 
@@ -141,25 +145,36 @@ else
         fip2=$(echo "$unassigned_ips" | awk '{print $2}')
         if [[ -n "$fip2" ]]; then
             echo "
-            $(date) Created floating ip for HAproxy server"
+            $(date) Created floating ip for HAproxy server (Floating ip for Virtual IP)"
         else
-            echo " $(date) Creating floating ip for HAproxy"
+            echo " $(date) Creating floating ip for HAproxy (Floating ip for Virtual IP)"
             created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
             fip2="$(cat floating_ip2)"
         fi
     else
-            echo " $(date) Creating floating ip for HAproxy"
+            echo " $(date) Creating floating ip for HAproxy (Floating ip for Virtual IP)"
             created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
             fip2="$(cat floating_ip2)"
     fi
     haproxy=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
     haproxy2=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423" $haproxy_server2 --key-name $keypair_name --flavor "1C-2GB-50GB" --network $network_name --security-group $security_group_name) 
-    add_haproxy_fip=$(openstack server add floating ip $haproxy_server $fip2)
+    # add_haproxy_fip=$(openstack server add floating ip $haproxy_server $fip2)
     # add_haproxy2_fip=$(openstack server add floating ip $haproxy_server2 $fip2)
+
     echo "$(date) created two HAproxy servers"
 fi
 
+## Attatch floating ip to vip port
+add_vip_fip=$(openstack floating ip set --port "$vip_port" $fip2)
+
+vip_addr=$(openstack port show "$vip_port" -f value -c fixed_ips | grep -Po '\d+\.\d+\.\d+\.\d+')
+echo "$vip_addr" >> vipaddr
+
+## Update vip port with fp pair
+update_port=$(openstack port set --allowed-address ip-address="$fip2" "$vip_port")
+
 devservers_count=$(grep -ocP $dev_server <<< $existing_servers)
+
 
 if(($required_dev_servers > $devservers_count)); then
     devservers_to_add=$(($required_dev_servers - $devservers_count))
@@ -200,8 +215,16 @@ fi
 
 
 bastionfip=$(openstack server list --name $bastion_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
-haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
-haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+')
+haproxyfip=$(openstack server show $haproxy_server -c addresses | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==1')
+haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==1')
+
+#update ports of haproxy servers
+portid_ha1=$(openstack port  list --fixed-ip ip-address="$haproxyfip" -c ID -f value)
+portid_ha2=$(openstack port  list --fixed-ip ip-address="$haproxyfip2" -c ID -f value)
+
+update_port1=$(openstack port set --allowed-address ip-address="$vip_addr" "$portid_ha1")
+update_port2=$(openstack port set --allowed-address ip-address="$vip_addr" "$portid_ha2")
+
 
 echo "$(date) Generating config file"
 echo "Host $bastion_server" >> $sshconfig

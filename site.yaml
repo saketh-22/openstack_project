@@ -9,13 +9,14 @@
       apt:
         update_cache: true
 
+
 - name: Configuring HAproxy loadbalancer
   hosts: HAproxy
   become: yes
   
   tasks:
 
-      
+    
     - name : sudo wait
       become: yes
       shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;
@@ -31,6 +32,10 @@
         name: keepalived
         state: present
         update_cache: true
+
+    - name: sudo sysctl -w net.ipv4.ip_nonlocal_bind=1
+      become: yes
+      shell: sysctl -w net.ipv4.ip_nonlocal_bind=1
 
     - name: gather server ip addresses
       setup:
@@ -77,9 +82,10 @@
 - hosts: primary_proxy
   become: yes
   vars:
+    host_name: "{{ inventory_hostname }}"
     node_state: MASTER
     node_priority: 101
-    virtual_ip: "{{ lookup('file', './floating_ip2') }}"
+    virtual_ip: "{{ lookup('file', './vipaddr') }}"
   tasks:
     - name: configure keepalived
       template:
@@ -90,9 +96,10 @@
 - hosts: backup_proxy
   become: yes
   vars:
+    host_name: "{{ inventory_hostname }}"
     node_state: BACKUP
     node_priority: 100
-    virtual_ip: "{{ lookup('file', './floating_ip2') }}"
+    virtual_ip: "{{ lookup('file', './vipaddr') }}"
   tasks:
     - name: configure keepalived
       template:
@@ -103,10 +110,15 @@
   hosts: HAproxy
   become: yes
   tasks:
+    - name: Ensure Keepalived service is running
+      systemd:
+        name: keepalived
+        enabled: yes
+
     - name: restart keepalived
       service:
         name: keepalived
-        state: restarted
+        state: started
 
 - hosts: webservers
   become: yes

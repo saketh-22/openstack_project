@@ -138,3 +138,8 @@ fi
 if [[ -f "$hostsfile" ]] ; then
     rm "$hostsfile"
 fi
+
+if [[ -f "vipaddr" ]] ; then
+  rm "vipaddr"
+
+fi
