@@ -122,6 +122,7 @@ do
         sequence=$(( $devservers_count+1 ))
         devserver_name=${dev_server}${sequence}
         
+        run_status=1 ## ansible run status
         while [ $devservers_to_add -gt 0 ]
         do   
             server_create=$(openstack server create --image "Ubuntu 20.04 Focal Fossa 20200423"  $devserver_name --key-name "$keypair_name" --flavor "1C-2GB-50GB" --network "$network_name" --security-group "$security_group_name")
@@ -138,8 +139,6 @@ do
             devserver_name=${dev_server}${sequence}
 
         done
-        echo "$(date) Running ansible playbook"
-        ansible-playbook -i "$hostsfile" site.yaml
 
     elif (( $required_dev_servers < $devservers_count )); then
         devservers_to_remove=$(($devservers_count - $required_dev_servers))
@@ -157,6 +156,13 @@ do
     if [ "$required_dev_servers" == "$devservers_count" ]; then
         delete_config
         generate_config
+
+        if [ $run_status -eq 1 ]; then
+            echo "$(date) Running ansible playbook"
+            ansible-playbook -i "$hostsfile" site.yaml
+            run_status=0
+        fi
+
     fi
 
     
