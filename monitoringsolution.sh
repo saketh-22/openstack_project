@@ -1,6 +1,6 @@
 #!/bin/bash
 
-fip1="$(cat floating_ip1)"
+#fip1="$(cat floating_ip1)"
 # set -e
 
 # # Step 1
@@ -41,7 +41,7 @@ sha256sum prometheus-2.26.0.linux-amd64.tar.gz
 tar -xvf prometheus-2.26.0.linux-amd64.tar.gz
 
 # Step 14
-cd prometheus-2.26.0.linux-amd64
+#cd prometheus-2.26.0.linux-amd64
 
 # Step 15
 cp /opt/prometheus-2.26.0.linux-amd64/prometheus /usr/local/bin/
@@ -74,36 +74,71 @@ chown -R prometheus:prometheus /etc/prometheus/console_libraries
 chown -R prometheus:prometheus /etc/prometheus/prometheus.yml
 
 # Step 25
-su -c prometheus /usr/local/bin/prometheus \
+# su -c prometheus /usr/local/bin/prometheus \
+#     --config.file /etc/prometheus/prometheus.yml \
+#     --storage.tsdb.path /var/lib/prometheus/ \
+#     --web.console.templates=/etc/prometheus/consoles \
+#     --web.console.libraries=/etc/prometheus/console_libraries
+#!/bin/bash
+
+# Your script commands before running multiple commands
+
+# Run the commands without sudo
+/usr/local/bin/prometheus \
     --config.file /etc/prometheus/prometheus.yml \
     --storage.tsdb.path /var/lib/prometheus/ \
     --web.console.templates=/etc/prometheus/consoles \
     --web.console.libraries=/etc/prometheus/console_libraries
 
 # Step 26
-nano /etc/systemd/system/prometheus.service
+#nano /etc/systemd/system/prometheus.service
 
 # Step 27
 # Copy the contents of the prometheus.service file to /etc/systemd/system/prometheus.service
-echo "[Unit]
-Description=Prometheus
-Wants=network-online.target
-After=network-online.target
+# echo "[Unit]" >> /etc/systemd/system/prometheus.service
+# echo "Description=Prometheus" >> /etc/systemd/system/prometheus.service
+# echo "Wants=network-online.target" >> /etc/systemd/system/prometheus.service
+# echo "After=network-online.target" >> /etc/systemd/system/prometheus.service
 
-[Service]
-User=prometheus
-Group=prometheus
-Type=simple
-ExecStart=/usr/local/bin/prometheus \
-    --config.file /etc/prometheus/prometheus.yml \
-    --storage.tsdb.path /var/lib/prometheus/ \
-    --web.console.templates=/etc/prometheus/consoles \
-    --web.console.libraries=/etc/prometheus/console_libraries \
-    --web.listen-address="$fip1":9090
-    Restart=always
-    RestartSec=10s
-[Install]
-WantedBy=multi-user.target" | tee /etc/systemd/system/prometheus.service > /dev/null
+# echo "[Service]" >> /etc/systemd/system/prometheus.service
+# echo "User=prometheus" >> /etc/systemd/system/prometheus.service
+# echo "Group=prometheus" >> /etc/systemd/system/prometheus.service
+# echo "Type=simple" >> /etc/systemd/system/prometheus.service
+# echo "ExecStart=/usr/local/bin/prometheus \" >> /etc/systemd/system/prometheus.service
+# echo " --config.file /etc/prometheus/prometheus.yml \" >> /etc/systemd/system/prometheus.service
+#     echo " --storage.tsdb.path /var/lib/prometheus/ \" >> /etc/systemd/system/prometheus.service
+#     echo " --web.console.templates=/etc/prometheus/consoles \" >> /etc/systemd/system/prometheus.service
+#     echo " --web.console.libraries=/etc/prometheus/console_libraries \" >> /etc/systemd/system/prometheus.service
+# echo " --web.listen-address=188.95.227.215:9090" >> /etc/systemd/system/prometheus.service
+# echo " Restart=always" >> /etc/systemd/system/prometheus.service
+# echo " RestartSec=10s " >> /etc/systemd/system/prometheus.service
+# echo " [Install]" >> /etc/systemd/system/prometheus.service
+# echo "WantedBy=multi-user.target" >> /etc/systemd/system/prometheus.service
+
+echo "[Unit]" >> /etc/systemd/system/prometheus.service
+echo "Description=Prometheus" >> /etc/systemd/system/prometheus.service
+echo "Wants=network-online.target" >> /etc/systemd/system/prometheus.service
+echo "After=network-online.target" >> /etc/systemd/system/prometheus.service
+
+echo "[Service]" >> /etc/systemd/system/prometheus.service
+echo "User=prometheus" >> /etc/systemd/system/prometheus.service
+echo "Group=prometheus" >> /etc/systemd/system/prometheus.service
+echo "Type=simple" >> /etc/systemd/system/prometheus.service
+echo "ExecStart=/usr/local/bin/prometheus \ "  >> /etc/systemd/system/prometheus.service
+    echo "--config.file /etc/prometheus/prometheus.yml \ " >> /etc/systemd/system/prometheus.service
+    echo "--storage.tsdb.path /var/lib/prometheus/ \ " >> /etc/systemd/system/prometheus.service
+    echo "--web.console.templates=/etc/prometheus/consoles \ " >> /etc/systemd/system/prometheus.service
+    echo "--web.console.libraries=/etc/prometheus/console_libraries \ " >> /etc/systemd/system/prometheus.service
+    echo "--web.listen-address=0.0.0.0:9090" >> /etc/systemd/system/prometheus.service
+
+echo "Restart=always" >> /etc/systemd/system/prometheus.service
+echo "RestartSec=10s" >> /etc/systemd/system/prometheus.service
+echo "[Install]" >> /etc/systemd/system/prometheus.service
+echo "WantedBy=multi-user.target" >> /etc/systemd/system/prometheus.service
+
+
+
+
 
 # Step 28
 systemctl daemon-reload
@@ -115,7 +150,7 @@ systemctl start prometheus
 systemctl enable prometheus
 
 # Step 31
-systemctl status prometheus
+#systemctl status prometheus
 
 # Step 32
 ufw allow 9090/tcp
