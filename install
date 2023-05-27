@@ -219,8 +219,8 @@ haproxyfip=$(openstack server show $haproxy_server -c addresses | grep -Po '\d+\
 haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==1')
 
 #update ports of haproxy servers
-portid_ha1=$(openstack port  list --fixed-ip ip-address="$haproxyfip" -c ID -f value)
-portid_ha2=$(openstack port  list --fixed-ip ip-address="$haproxyfip2" -c ID -f value)
+portid_ha1=$(openstack port list --fixed-ip ip-address="$haproxyfip" -c ID -f value)
+portid_ha2=$(openstack port list --fixed-ip ip-address="$haproxyfip2" -c ID -f value)
 
 update_port1=$(openstack port set --allowed-address ip-address="$vip_addr" "$portid_ha1")
 update_port2=$(openstack port set --allowed-address ip-address="$vip_addr" "$portid_ha2")

@@ -1,22 +1,15 @@
-vrrp_script chk_haproxy {
-  script "killall -0 haproxy" # check the haproxy process
-  interval 2 # every 2 seconds
-  weight 2 # add 2 points if OK
-}
 
 vrrp_instance VI_1 {
     state {{ node_state }}
-    interface eth0
+    interface ens3
     virtual_router_id 51
     priority {{ node_priority }}
     advert_int 1
     
     virtual_ipaddress {
-        {{ virtual_ip }}/24 brd 10.10.0.255 dev eth0
+        {{ virtual_ip }}/24
     }
     
-    track_script {
-     chk_haproxy
   }
 }
 

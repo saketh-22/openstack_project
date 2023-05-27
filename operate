@@ -24,8 +24,9 @@ source $rc_file
 
 generate_config(){
     bastionfip=$(openstack server list --name $bastion_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
-    haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
-    haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==2')
+    # haproxyfip=$(openstack server list --name $haproxy_server -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==1')
+    haproxyfip=$(openstack server show $haproxy_server -c addresses | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==1')
+    haproxyfip2=$(openstack server list --name $haproxy_server2 -c Networks -f value | grep -Po '\d+\.\d+\.\d+\.\d+' | awk 'NR==1')
 
     echo "$(date) Generating config file"
     echo "Host $bastion_server" >> $sshconfig
@@ -42,6 +43,7 @@ generate_config(){
     echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
     echo "   StrictHostKeyChecking no" >> $sshconfig
     echo "   PasswordAuthentication no ">> $sshconfig
+    echo "   ProxyJump $bastion_server" >> $sshconfig
 
     echo " " >> $sshconfig
     echo "Host $haproxy_server2" >> $sshconfig
@@ -50,10 +52,18 @@ generate_config(){
     echo "   IdentityFile ~/.ssh/id_rsa" >> $sshconfig
     echo "   StrictHostKeyChecking no" >> $sshconfig
     echo "   PasswordAuthentication no ">> $sshconfig
+    echo "   ProxyJump $bastion_server" >> $sshconfig
 
     # generate hosts file
     echo "[HAproxy]" >> $hostsfile
     echo "$haproxy_server" >> $hostsfile
+    echo "$haproxy_server2" >> $hostsfile
+
+    echo " " >> $hostsfile
+    echo "[primary_proxy]" >> $hostsfile
+    echo "$haproxy_server" >> $hostsfile
+    echo " " >> $hostsfile
+    echo "[backup_proxy]" >> $hostsfile
     echo "$haproxy_server2" >> $hostsfile
 
     echo " " >> $hostsfile
@@ -84,6 +94,7 @@ generate_config(){
     echo "ansible_ssh_private_key_file=~/.ssh/id_rsa" >> $hostsfile
     echo "ansible_ssh_common_args=' -F $sshconfig '" >> $hostsfile
 }
+
 
 delete_config(){
     if [[ -f "$hostsfile" ]] ; then
@@ -127,6 +138,9 @@ do
             devserver_name=${dev_server}${sequence}
 
         done
+        echo "$(date) Running ansible playbook"
+        ansible-playbook -i "$hostsfile" site.yaml
+
     elif (( $required_dev_servers < $devservers_count )); then
         devservers_to_remove=$(($devservers_count - $required_dev_servers))
         sequence1=0
@@ -145,7 +159,8 @@ do
         generate_config
     fi
 
-
+    
+    
     echo "Entering into sleep mode"
     sleep 10
 done

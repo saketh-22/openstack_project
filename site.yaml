@@ -118,6 +118,11 @@
     - name: restart keepalived
       service:
         name: keepalived
+        state: restarted
+        
+    - name: start keepalived
+      service:
+        name: keepalived
         state: started
 
 - hosts: webservers
