@@ -152,7 +152,7 @@ else
             fip2="$(cat floating_ip2)"
         fi
     else
-            echo " $(date) Creating floating ip for HAproxy (Floating ip for Virtual IP)"
+            echo "$(date) Creating floating ip for HAproxy (Floating ip for Virtual IP)"
             created_fip2=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip2)
             fip2="$(cat floating_ip2)"
     fi
@@ -254,6 +254,9 @@ echo "   PasswordAuthentication no ">> $sshconfig
 echo "   ProxyJump $bastion_server" >> $sshconfig
 
 # generate hosts file
+echo "[bastion]" >> $hostsfile
+echo "$bastion_server" >> $hostsfile
+echo " " >> $hostsfile
 echo "[HAproxy]" >> $hostsfile
 echo "$haproxy_server" >> $hostsfile
 echo "$haproxy_server2" >> $hostsfile
