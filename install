@@ -79,8 +79,11 @@ then
     rule3=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 5000 --protocol tcp --ingress $security_group_name)
     rule4=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 8080 --protocol tcp --ingress $security_group_name)
     rule5=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 6000 --protocol udp --ingress $security_group_name)
-    rule6=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name)
-    rule7=$(openstack security group rule create --protocol 112 $security_group_name) #VVRP protocol
+    rule6=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 9090 --protocol tcp --ingress $security_group_name)
+    rule7=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 9100 --protocol tcp --ingress $security_group_name)
+    rule8=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 3000 --protocol tcp --ingress $security_group_name)
+    rule9=$(openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 161 --protocol udp --ingress $security_group_name)
+    rule10=$(openstack security group rule create --protocol 112 $security_group_name) #VVRP protocol
 
     echo "$(date) Created security group $security_group_name"
 else
