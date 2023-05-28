@@ -76,6 +76,8 @@ chown -R prometheus:prometheus /etc/prometheus/console_libraries
 chown -R prometheus:prometheus /etc/prometheus/prometheus.yml
 echo "changing the permissions"
 
+chown -R prometheus:prometheus /var/lib/prometheus
+chmod -R 755 /var/lib/prometheus
 
 # sudo -u prometheus /usr/local/bin/prometheus \
 #         --config.file /etc/prometheus/prometheus.yml \
