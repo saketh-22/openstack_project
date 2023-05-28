@@ -3,7 +3,7 @@ current_date_time=$(date)
 rc_file=$1
 tag_name=$2
 publickey=$3
-required_dev_servers=$(cat servers.conf)
+required_dev_servers=3
 
 echo "$current_date_time Starting deployment of $tag_name using $rc_file for credentials."
 source $rc_file
