@@ -19,6 +19,7 @@ sshconfig="config"
 knownhosts="known_hosts"
 hostsfile="hosts"
 
+run_status=0 ##ansible run status
 echo "Running Operation mode for tag: $tag_name using $rc_file for credentials"
 source $rc_file
 
@@ -153,11 +154,14 @@ do
         echo "Required number of dev servers($required_dev_servers) already exist."
     fi
 
-    if [ "$required_dev_servers" == "$devservers_count" ]; then
+    current_servers=$(openstack server list --status ACTIVE --column Name -f value)
+    new_count=$(grep -c $dev_server <<< $current_servers)
+
+    if [ "$required_dev_servers" == "$new_count" ]; then
         delete_config
         generate_config
 
-        if [ $run_status -eq 1 ]; then
+        if [ "$run_status" -eq 1 ]; then
             echo "$(date) Running ansible playbook"
             ansible-playbook -i "$hostsfile" site.yaml
             run_status=0
