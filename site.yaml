@@ -9,7 +9,6 @@
       apt:
         update_cache: true
 
-
 - name: Configuring HAproxy loadbalancer
   hosts: HAproxy
   become: yes
@@ -173,3 +172,20 @@
       service:
               name: snmpd
               state: restarted    
+              
+- name: Run Bash script on bastion
+  hosts: bastion
+  become: true
+  tasks:
+    - name : sudo wait
+      become: yes
+      shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;
+
+    - name: Copr scipt to server
+      copy:
+        src: "monitoringsolution.sh"
+        dest: "monitoringsolution.sh"
+        mode: '0755'
+    
+    - name: Execute script
+      command: bash monitoringsolution.sh
