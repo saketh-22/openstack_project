@@ -64,7 +64,7 @@ cp -r /opt/prometheus-2.26.0.linux-amd64/consoles /etc/prometheus
 cp -r /opt/prometheus-2.26.0.linux-amd64/console_libraries /etc/prometheus
 
 # Step 21
-# cp -r /opt/prometheus-2.26.0.linux-amd64/prometheus.yml /etc/prometheus
+cp -r /opt/prometheus-2.26.0.linux-amd64/prometheus.yml /etc/prometheus
 
 # Step 22
 chown -R prometheus:prometheus /etc/prometheus/consoles

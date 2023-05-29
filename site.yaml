@@ -200,6 +200,11 @@
     - name: Execute script
       command: bash monitoringsolution.sh
 
+    - name: Restart prometheus
+      systemd:
+        name: prometheus
+        state: restarted 
+
     
 
     
