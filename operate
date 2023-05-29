@@ -127,7 +127,6 @@ do
         echo "$(date) Creating $devservers_to_add more dev servers ..."
         sequence=$(( $total_count+1 ))
         devserver_name=${dev_server}${sequence}
-        if 
         
         run_status=1 ## ansible run status
         while [ $devservers_to_add -gt 0 ]
