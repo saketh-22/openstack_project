@@ -56,6 +56,9 @@ generate_config(){
     echo "   ProxyJump $bastion_server" >> $sshconfig
 
     # generate hosts file
+    echo "[bastion]" >> $hostsfile
+    echo "$bastion_server" >> $hostsfile
+    echo " " >> $hostsfile
     echo "[HAproxy]" >> $hostsfile
     echo "$haproxy_server" >> $hostsfile
     echo "$haproxy_server2" >> $hostsfile
