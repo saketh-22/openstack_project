@@ -124,7 +124,7 @@ else
    if [[ -n "$unassigned_ips" ]]; then
         fip1=$(echo "$unassigned_ips" | awk '{print $1}')
         if [[ -n "$fip1" ]]; then
-            echo "$(date) Created floating ip for bastion server"
+            echo "$(date) Assigned floating ip for bastion server"
         else
             echo "$(date) Creating floating ip for bastion"
             created_fip1=$(openstack floating ip create ext-net -f json | jq -r '.floating_ip_address' > floating_ip1)
@@ -301,3 +301,7 @@ echo "ansible_ssh_common_args=' -F $sshconfig '" >> $hostsfile
 
 echo "$(date) Running ansible playbook"
 ansible-playbook -i "$hostsfile" site.yaml
+
+echo "Bastion IP address: $fip1"
+
+echo "HAproxy IP address: $fip2"

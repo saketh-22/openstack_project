@@ -173,19 +173,55 @@
               name: snmpd
               state: restarted    
               
-- name: Run Bash script on bastion
+- name: Install Prometheus and Grafana on Bastion
   hosts: bastion
+  gather_facts: yes
   become: true
   tasks:
     - name : sudo wait
       become: yes
       shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;
+ 
+    - name: gather server ip addresses
+      setup:
+          filter: ansible_default_ipv4.address     
 
-    - name: Copr scipt to server
+    - name: Copr script to server
       copy:
         src: "monitoringsolution.sh"
         dest: "monitoringsolution.sh"
         mode: '0755'
     
+    - name: copy prometheus.yml
+      template:
+        src: "prometheus.yml.j2"
+        dest: "/etc/prometheus/prometheus.yml"
+
     - name: Execute script
       command: bash monitoringsolution.sh
+
+    
+
+    
+- name: Install Node exporter on nodes
+  hosts: webservers
+  gather_facts: yes
+  become: true
+  tasks:
+  
+    - name: gather server ip addresses
+      setup:
+            filter: ansible_default_ipv4.address
+
+    - name : sudo wait
+      become: yes
+      shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;
+
+    - name: Copr script to server
+      copy:
+        src: "node_exp.sh"
+        dest: "node_exp.sh"
+        mode: '0755'
+    
+    - name: Execute script
+      command: bash node_exp.sh
