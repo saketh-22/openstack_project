@@ -192,13 +192,13 @@
         dest: "monitoringsolution.sh"
         mode: '0755'
     
+    - name: Execute script
+      command: bash monitoringsolution.sh
+
     - name: copy prometheus.yml
       template:
         src: "prometheus.yml.j2"
         dest: "/etc/prometheus/prometheus.yml"
-
-    - name: Execute script
-      command: bash monitoringsolution.sh
 
     - name: Restart prometheus
       systemd:
