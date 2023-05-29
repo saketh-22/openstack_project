@@ -119,12 +119,15 @@ do
     devservers_count=$(grep -c $dev_server <<< $existing_servers)
     echo "$(date) Have $devservers_count dev servers"
     
+    total_servers=$(openstack server list --column Name -f value)
+    total_count=$(grep -c $dev_server <<< $total_servers)
 
     if (($required_dev_servers > $devservers_count)); then
         devservers_to_add=$(($required_dev_servers - $devservers_count))
         echo "$(date) Creating $devservers_to_add more dev servers ..."
-        sequence=$(( $devservers_count+1 ))
+        sequence=$(( $total_count+1 ))
         devserver_name=${dev_server}${sequence}
+        if 
         
         run_status=1 ## ansible run status
         while [ $devservers_to_add -gt 0 ]
